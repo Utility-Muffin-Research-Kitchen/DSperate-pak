@@ -8,6 +8,7 @@ redistributing the built pak.
 | The DSperate binary (`bin/dsperate`) | **GPL-3.0-or-later** | `DSPERATE-LICENSE.txt`; in the package also `LICENSE-DSPERATE.txt` |
 | Third-party code inside DSperate (miniz, rcheevos) | See their notices in the DSperate source | The corresponding-source archive |
 | This repository's build system, manifest, wrapper, scripts | MIT | `REPO-LICENSE.txt` |
+| Pak branding artwork | User-supplied ChatGPT artwork; separate provenance | `pak/art/SOURCE.md` |
 
 DSperate is a clean-room emulator; its own `LICENSE` and `src/core/bios/LICENSE.freebios`
 are reproduced by the source this repository builds. The binary links the

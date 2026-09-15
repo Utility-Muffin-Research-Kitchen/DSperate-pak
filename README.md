@@ -1,7 +1,13 @@
 # DSperate-pak
 
+<img src="pak/res/icon.png" alt="DSperate pak two-screen mark" width="96">
+
 An optional standalone Nintendo DS emulator for Leaf on the Miniloong Pocket 1
-(MLP1), installable through Pak Rat.
+(MLP1), packaged for Pak Rat.
+
+[DSperate](https://github.com/beebono/DSperate) is created by
+[beebono](https://github.com/beebono). This repository builds and packages their
+emulator for Leaf; upstream development and credit belong to that project.
 
 DSperate is added as an alternate core for the existing Nintendo DS system, so
 there is no new tile and no app to open. Install this pak and DSperate appears
@@ -15,10 +21,11 @@ clean clone with no sibling checkout.
 
 ## Status
 
-Early. The build lane and wrapper exist; device qualification is outstanding.
-The settings, controls and limits below are the intended behavior and may move
-as the plan's spike and qualification steps complete. See
-`../umrk-workspace/plans/dsperate-standalone-content-pak.md` for the plan.
+Experimental; no pak release has been published. The pinned binary has passed
+an MLP1 smoke test for Wayland dmabuf display, orientation, basic battery-save
+round-trip and termination. Full performance, archive and sleep qualification
+remain pending. The target is Leaf 0.12.0 with W3/W4 input and Menu support.
+See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
 ## Build
 
@@ -48,18 +55,36 @@ DSperate in the Nintendo DS core picker.
 | --- | --- |
 | Configuration | `$USERDATA_PATH/dsperate/dsperate.ini`, on the primary card |
 | Per-game settings | `$USERDATA_PATH/dsperate/games/<game key>/` |
-| Battery saves | `$SAVES_PATH/DSperate/`, for the selected card |
-| Save states and screenshots | `$STATES_PATH/DSperate/`, for the selected card |
-| ROM unpack cache | `$USERDATA_PATH/dsperate/cache/` |
+| Battery saves | `$SAVES_PATH/DSperate/<game key>/<ROM stem>.sav`, for the selected card |
+| Save states and screenshots | `$STATES_PATH/DSperate/<game key>/`, for the selected card |
+| ROM unpack cache fallback | `$USERDATA_PATH/dsperate/cache/<game key>/` |
+| Firmware settings sidecar | `$USERDATA_PATH/dsperate/games/<game key>/firmware.ovr` |
 | Log | `$LOGS_PATH/dsperate.log` |
 
-The game key comes from the ROM's path relative to the selected card's
-`Roms/NDS`, so two same-named ROMs in different folders do not share progress.
+The game key hashes the logical card slot (`primary` or `secondary_sd`) and
+the ROM's path relative to that card's `Roms/NDS`. Same-named ROMs in different
+folders or card slots have separate saves, states and settings. Changing a
+card's mount path preserves the key.
 Renaming or moving a ROM starts a new identity; it does not silently merge
 progress.
 
 DSperate's saves are raw SRAM in its own format. They are not DraStic or Fun
 DraStic saves, and switching emulators switches saves.
+
+### Earlier test installs
+
+The initial test wrapper used shared basename saves, shared game-code states
+and `g<cksum>` config folders. Those files are retained. New launches use
+`v2-<sha256>` directories, so earlier progress needs a manual, backed-up copy:
+launch the intended game once and quit, then copy its old `.sav` into the new
+save directory named in `dsperate.log`. Copy only the matching `.dss` states
+into that game's state directory. Shared old names cannot identify which game
+owned them, so the wrapper does not automatically assign them to a new game.
+
+To keep an earlier layout, copy its old game INI to the matching new game INI
+path under `games/<key>/xdg/dsperate/games/`. Remove any `pad.stick_deadzone = 0`
+that was written by the old heuristic unless you confirmed calibration for the
+selected controller. Launch-bound paths are refreshed on the next launch.
 
 ## BIOS and firmware
 
@@ -82,10 +107,11 @@ The MLP1 profile:
   responding. Quit is also in DSperate's pause menu.
 - The stick moves the stylus. The MLP1 has one stick, on the left, and no R3,
   so nothing is mapped to the right stick. The d-pad is the d-pad.
-- The stick is the calibrated one. Leaf hands the emulator Jawaka's virtual
-  pad, already normalized through the stick-calibration profile with the centre
-  zeroed, so DSperate does not add a second deadzone. Without a profile the
-  wrapper falls back to DSperate's own deadzone.
+- The default stick deadzone is 12000. Once you confirm the selected controller
+  receives Jawaka's calibrated output, you can set `[pad] stick_deadzone = 0`
+  in your global or per-game INI to avoid applying another deadzone. Your value
+  is preserved; a controller roster or calibration file alone does not prove
+  which controller DSperate receives.
 - R2 taps the screen and L2 is a second tap, for touch games. Hold Select and
   press R2 to fast-forward.
 - The face buttons follow the printed labels.
@@ -105,10 +131,25 @@ coordinates are demonstrated on hardware during qualification.
 - MLP1 only.
 - `.nds` and `.zip` content. DSperate does not read `.7z`, and the NDS system
   passes archives through, so a `.7z` is not playable.
-- The Wayland dmabuf scanout tier is compiled in, but its device qualification
-  (dma-heap allocation, Weston dmabuf import, orientation and performance) is
-  outstanding. The SDL window-surface route is the fallback.
+- Wayland dmabuf import and orientation passed the device smoke test.
+  Sustained performance and sleep/resume remain unqualified.
+- ZIP cache placement and total bounds remain pending: upstream prefers a
+  cache beside the ROM and only uses the configured cache root as a fallback.
+- Required data paths containing INI comment delimiters (`#` or `;`) are
+  refused. ROM filenames may contain those characters. A config-write failure
+  stops launch and is recorded in the log; an on-screen error is still pending.
+- Existing global configs are preserved on updates. Defaults-version migration
+  has not been implemented.
 - No bundled games, BIOS or firmware.
+
+## Artwork
+
+<img src="pak/art/DSperate-photo.png" alt="Gray dual-screen console with teal and orange DSperate pak branding" width="320">
+
+The packaging art was generated with ChatGPT and supplied by UMRK. It is not an
+official DSperate logo. The unchanged originals are archived in `umrk-assets`;
+small PNG exports are included here so your build needs no private repository.
+See [artwork provenance](pak/art/SOURCE.md).
 
 ## Licence
 

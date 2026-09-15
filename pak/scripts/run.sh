@@ -11,15 +11,12 @@
 # from the public runtime contract (docs/runtime-paths.md); the only fallbacks
 # below are for a direct/manual launch outside the launcher.
 #
-# Packet/game identity is the ROM's path relative to the selected source's
+# Game identity is the ROM's path relative to the selected source's
 # Roms/NDS plus the selected source slot. Saves, states and per-game settings
 # are kept in per-game directories keyed on that identity, so two same-named
 # ROMs in different folders do not share progress. A path-based key means
 # renaming or moving a ROM starts a new identity; that is deliberate.
 #
-# This is the first-pass wrapper for the MLP1 spike. It establishes the data
-# separation the plan calls for; the controller profile and the archive policy
-# are still to be settled.
 set -u
 
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
@@ -43,18 +40,18 @@ fi
 : "${STATES_PATH:=$SDCARD_PATH/States}"
 : "${BIOS_PATH:=$SDCARD_PATH/BIOS}"
 : "${UMRK_RUNTIME_PATH:=${TMPDIR:-/tmp}/jawaka-runtime}"
+export SDCARD_PATH ROMS_PATH
 
 STATE_ROOT="$USERDATA_PATH/dsperate"
-SAVES_DIR="$SAVES_PATH/DSperate"
-STATES_DIR="$STATES_PATH/DSperate"
-SHOTS_DIR="$STATES_DIR/screenshots"
 CACHE_DIR="$STATE_ROOT/cache"
 RUNTIME_DIR="$UMRK_RUNTIME_PATH/dsperate"
 GLOBAL_INI="$STATE_ROOT/dsperate.ini"
 BIN="$ROOT_DIR/bin/dsperate"
 LOG_FILE="$LOGS_PATH/dsperate.log"
 
-log() { printf 'dsperate: %s\n' "$*" >>"$LOG_FILE" 2>/dev/null || true; }
+die() { echo "dsperate: $*" >&2; log "$*"; exit 1; }
+
+log() { printf 'dsperate: %s\n' "$*" 2>/dev/null >>"$LOG_FILE" || true; }
 
 usage() {
     echo "usage: $0 ROM" >&2
@@ -80,19 +77,43 @@ if [ ! -x "$BIN" ]; then
     exit 1
 fi
 
-mkdir -p "$RUNTIME_DIR" "$STATE_ROOT" "$SAVES_DIR" "$STATES_DIR" "$SHOTS_DIR" \
-         "$CACHE_DIR" "$LOGS_PATH" 2>/dev/null || true
-
 # --- game identity -----------------------------------------------------------
-# The ROM's path relative to the selected source's Roms/NDS. Falls back to the
-# absolute path when the ROM is not under that root, so a key is always defined.
+# The launcher binds singular content roots to the selected source while the
+# public plural list retains its stable slot order (including absent cards).
+# Never infer the slot from a physical mount name or the presence of a card.
+SOURCE_ID="$(awk 'BEGIN {
+    roots = ENVIRON["ROMS_PATHS"]
+    if (roots == "") roots = ENVIRON["SDCARD_PATH"] "/Roms"
+    n = split(roots, r, ":")
+    if (n < 1 || n > 2) exit 1
+    selected = -1
+    for (i = 1; i <= n; i++) {
+        sub(/\/$/, "", r[i])
+        if (r[i] == "" || seen[r[i]]++) exit 1
+        if (r[i] == ENVIRON["ROMS_PATH"]) selected = i
+    }
+    if (selected < 0) exit 1
+    print (selected == 1 ? "primary" : "secondary_sd")
+}')" || die "cannot identify the selected source in ROMS_PATHS"
 ROM_ROOT="${ROMS_PATH%/}/NDS"
 case "$ROM_PATH" in
     "$ROM_ROOT"/*) ROM_REL="${ROM_PATH#"$ROM_ROOT"/}" ;;
-    *)             ROM_REL="$ROM_PATH" ;;
+    *) die "ROM must be inside the selected source's Roms/NDS" ;;
 esac
-GAME_KEY="g$(printf '%s' "$ROM_REL" | cksum | awk '{print $1}')"
+# Reject traversal aliases: one spelling of a relative path means one identity.
+case "/$ROM_REL/" in
+    *'/../'*|*'/./'*|*'//'*) die "ROM path must not contain . or .. components" ;;
+esac
+DIGEST="$(printf '%s\000%s' "$SOURCE_ID" "$ROM_REL" | sha256sum)" || die "cannot hash game identity"
+GAME_KEY="v2-${DIGEST%% *}"
 GAME_DIR="$STATE_ROOT/games/$GAME_KEY"
+SAVES_DIR="$SAVES_PATH/DSperate/$GAME_KEY"
+STATES_DIR="$STATES_PATH/DSperate/$GAME_KEY"
+SHOTS_DIR="$STATES_DIR/screenshots"
+CACHE_DIR="$CACHE_DIR/$GAME_KEY"
+mkdir -p "$RUNTIME_DIR" "$STATE_ROOT" "$SAVES_DIR" "$STATES_DIR" "$SHOTS_DIR" \
+         "$CACHE_DIR" "$LOGS_PATH" || die "cannot create game data directories"
+
 ROM_STEM="$(basename -- "$ROM_PATH")"
 case "$ROM_STEM" in
     *.*) ROM_STEM="${ROM_STEM%.*}" ;;
@@ -104,36 +125,36 @@ esac
 export XDG_CONFIG_HOME="$GAME_DIR/xdg"
 CFG_DIR="$XDG_CONFIG_HOME/dsperate"
 GAME_INI="$CFG_DIR/games/$ROM_STEM.ini"
-mkdir -p "$CFG_DIR/games" 2>/dev/null || true
+mkdir -p "$CFG_DIR/games" || die "cannot create game config directory"
 
 # Seed the shared global config once, from the pak's defaults. It is the user's
 # file from then on; launches never rewrite it.
-if [ ! -f "$GLOBAL_INI" ]; then
-    if [ -f "$ROOT_DIR/defaults/dsperate.ini" ]; then
-        cp "$ROOT_DIR/defaults/dsperate.ini" "$GLOBAL_INI" 2>/dev/null || : >"$GLOBAL_INI"
-    else
-        : >"$GLOBAL_INI"
-    fi
+if [ ! -e "$GLOBAL_INI" ]; then
+    cp "$ROOT_DIR/defaults/dsperate.ini" "$GLOBAL_INI.tmp.$$" &&
+        mv "$GLOBAL_INI.tmp.$$" "$GLOBAL_INI" || die "cannot seed global config"
 fi
+[ -f "$GLOBAL_INI" ] && [ -r "$GLOBAL_INI" ] || die "cannot read global config"
 
 # ini_set FILE SECTION KEY VALUE
 #
 # Set one key in one section, preserving every other line, comment and section.
-# Values with a '#' or ';' would be truncated by DSperate's INI parser, so warn
-# and skip instead of writing a broken value. Writes through a temp file and
+# Refuse values DSperate's INI parser cannot represent; required paths must
+# never silently fall back to the ROM directory. Writes through a temp file and
 # renames, so the destination is never left half-written.
 ini_set() {
     _file="$1" _section="$2" _key="$3" _value="$4"
     case "$_value" in
-        *[\#\;]*)
-            log "refusing to write a config value containing # or ;: $_key"
-            return 0
+        *[\#\;\\]*|*"
+"*|*"$(printf '\r')"*|[[:space:]]*|*[[:space:]])
+            log "config value cannot be represented: $_key"
+            return 1
             ;;
     esac
-    [ -f "$_file" ] || : >"$_file" 2>/dev/null || true
+    [ ! -e "$_file" ] || [ -f "$_file" ] || return 1
+    [ -f "$_file" ] || : >"$_file" || return 1
     _tmp="$_file.tmp.$$"
-    if awk -v S="$_section" -v K="$_key" -v V="$_value" '
-        BEGIN { in_s = 0; have_s = 0; done = 0 }
+    if DS_INI_VALUE="$_value" awk -v S="$_section" -v K="$_key" '
+        BEGIN { V = ENVIRON["DS_INI_VALUE"]; in_s = 0; have_s = 0; done = 0 }
         {
             line = $0
             if (line ~ /^[ \t]*\[[^]]*\][ \t]*$/) {
@@ -165,40 +186,23 @@ ini_set() {
     else
         rm -f "$_tmp" 2>/dev/null || true
         log "could not update $_file"
+        return 1
     fi
 }
 
-# Launch-bound paths. These live in the per-game file, which DSperate loads on
-# top of the global config and which is also where it remembers a per-game
-# layout, so only these three keys are touched.
-ini_set "$GAME_INI" paths states "$STATES_DIR"
-ini_set "$GAME_INI" paths screenshots "$SHOTS_DIR"
-ini_set "$GAME_INI" paths cache "$CACHE_DIR"
-
-# Stick deadzone. When Jawaka hands us its grabbed virtual pad AND a calibration
-# profile is installed, the proxy normalizes ABS_X/ABS_Y through that profile:
-# the centre becomes exactly zero and the proxy already applies the profile's
-# deadzone before scaling to the full range. DSperate's own deadzone would then
-# be a second one over the normalized value, eating a large part of the travel,
-# so it is disabled. Without the virtual pad (a direct run) or without a profile
-# (the proxy forwards raw values), DSperate's deadzone is the only one and the
-# raw fallback applies.
-CAL_PROFILE="$USERDATA_PATH/input/loong-gamepad-calibration.json"
-STICK_DEADZONE=12000
-if [ -n "${SDL_JOYSTICK_DEVICE:-}" ] && [ -f "$CAL_PROFILE" ] &&
-   grep -q '"x_min"' "$CAL_PROFILE" 2>/dev/null &&
-   grep -q '"y_min"' "$CAL_PROFILE" 2>/dev/null; then
-    STICK_DEADZONE=0
-fi
-ini_set "$GAME_INI" pad stick_deadzone "$STICK_DEADZONE"
-log "stick deadzone $STICK_DEADZONE (calibrated virtual pad: $([ "$STICK_DEADZONE" = 0 ] && echo yes || echo no))"
+# Only launch-bound paths are pak-owned. Controls/deadzones stay user-owned.
+# A roster and a JSON file do not prove the selected pad was calibrated.
+ini_set "$GAME_INI" paths states "$STATES_DIR" || die "cannot bind save-state path"
+ini_set "$GAME_INI" paths screenshots "$SHOTS_DIR" || die "cannot bind screenshot path"
+ini_set "$GAME_INI" paths cache "$CACHE_DIR" || die "cannot bind cache path"
+ini_set "$GAME_INI" paths firmware_override "$GAME_DIR/firmware.ovr" || die "cannot bind firmware sidecar"
 
 # --- presentation ------------------------------------------------------------
 # Weston owns the panel transform on MLP1, so the emulator runs a plain
 # fullscreen Wayland window and never rotates the output itself. DS_ROTATE is
 # cleared so an inherited value cannot make the display engine rotate a second
 # time.
-export SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}"
+export SDL_VIDEODRIVER=wayland
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export SDL_JOYSTICK_DISABLE_UDEV=1

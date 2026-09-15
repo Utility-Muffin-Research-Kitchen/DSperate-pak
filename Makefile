@@ -49,8 +49,10 @@ verify-standalone:
 # defaults and the licence notice ship beside it. No launch.sh, no Apps entry.
 package-mlp1: standalone
 	@rm -rf "$(PACKAGE)"
-	@mkdir -p "$(PACKAGE)/scripts" "$(PACKAGE)/bin" "$(PACKAGE)/defaults"
+	@mkdir -p "$(PACKAGE)/scripts" "$(PACKAGE)/bin" "$(PACKAGE)/defaults" "$(PACKAGE)/art" "$(PACKAGE)/res"
 	@cp "$(REPO_ROOT)/pak/pak.json" "$(PACKAGE)/pak.json"
+	@cp "$(REPO_ROOT)/pak/art/"* "$(PACKAGE)/art/"
+	@cp "$(REPO_ROOT)/pak/res/icon.png" "$(PACKAGE)/res/icon.png"
 	@cp "$(REPO_ROOT)/pak/scripts/run.sh" "$(PACKAGE)/scripts/run.sh"
 	@cp "$(REPO_ROOT)/pak/defaults/dsperate.ini" "$(PACKAGE)/defaults/dsperate.ini"
 	@cp "$(BUILD)/standalone/dsperate" "$(PACKAGE)/bin/dsperate"

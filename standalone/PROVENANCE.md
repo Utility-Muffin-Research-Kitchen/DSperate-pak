@@ -77,6 +77,14 @@ binary is dynamically linked to the device's Wayland-capable SDL. The dmabuf
 tier loads `libwayland-client.so.0` with `dlopen` at runtime, so `libwayland`
 is not a link-time dependency.
 
+Independent ABI check (2026-09-16), compiled for AArch64 with the pinned SDK:
+`sizeof(SDL_SysWMinfo) = 72`, `offsetof(info) = 8`, Wayland member size 64,
+`offsetof(info.wl.surface) = 16`, and `offsetof(info.wl.xdg_toplevel) = 48`.
+The public structure size and union offset agree with and without the define.
+A separate full build with the define reproduced the locked artifact hash.
+This check applies to these pinned SDL 2.28.5 headers and the qualified device
+SDL; changing the SDK or runtime SDL requires checking the ABI again.
+
 Evidence in the pinned artifact: `strings` shows `zwp_linux_dmabuf_v1`,
 `zwp_linux_dmabuf_feedback_v1`, `/dev/dma_heap` and `libwayland-client.so.0`,
 and the `NEEDED` set is unchanged from the window-surface-only build. The build

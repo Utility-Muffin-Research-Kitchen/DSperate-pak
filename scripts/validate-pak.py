@@ -143,6 +143,13 @@ def main() -> int:
             return 1
         print("ok   package: wrapper, binary, defaults and licence notice")
 
+    # Branding assets are intentionally not NDS system art declarations.
+    for rel in ("res/icon.png", "art/DSperate-flat.png", "art/DSperate-photo.png",
+                "art/DSperate-wordmark.png", "art/SOURCE.md"):
+        if not (pak_dir / rel).is_file():
+            print(f"FAIL package art: missing {rel}")
+            return 1
+
     warnings = content_model.manifest_warnings(manifest)
     for warning in sorted(warnings):
         print(f"warn {warning}")
