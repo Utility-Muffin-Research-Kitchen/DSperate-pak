@@ -11,7 +11,9 @@
   },
   "build": {
     "backend": "sdl",
-    "sdl2": "device-provided libSDL2-2.0.so.0, linked dynamically; the MLP1 ships 2.28.5",
+    "sdl2": "device-provided libSDL2-2.0.so.0, linked dynamically; the MLP1 ships 2.28.5 built with its Wayland video driver",
+    "wayland_define": "-DSDL_VIDEO_DRIVER_WAYLAND=1",
+    "wayland_note": "The toolchain sysroot's SDL2 2.28.5 is built without its Wayland driver, so its SDL_config.h leaves SDL_VIDEO_DRIVER_WAYLAND undefined and SDL_syswm.h hides SDL_SysWMinfo's Wayland fields. Defining the macro for this build exposes those fields without changing the toolchain, and is what lets the intended dmabuf tier compile. The public union reserves the fields' space regardless, and the binary links the device's Wayland-capable SDL at runtime. The build fails if the probe or display_wl.cpp does not confirm the real tier.",
     "language": "C++17, upstream CMake/Ninja build",
     "source_date_epoch": 1789088321,
     "source_date_note": "The pinned commit's committer timestamp.",
@@ -20,6 +22,7 @@
     "cmake": [
       "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
       "-DCMAKE_TOOLCHAIN_FILE=<standalone>/mlp1-toolchain.cmake",
+      "-DCMAKE_CXX_FLAGS=-DSDL_VIDEO_DRIVER_WAYLAND=1",
       "-DDSPERATE_TESTS=OFF",
       "-DDSPERATE_HEADLESS=OFF",
       "-DDSPERATE_CHEEVOS=ON",
@@ -40,8 +43,8 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "bfdde65e4d00cb566ce1f12757816aa778450184bd62f8bf52d1bd029fe9a936",
-    "size_bytes": 1779872,
-    "note": "Recorded 2026-09-15 from two clean FORCE=1 builds in the digest-pinned toolchain that agreed byte for byte. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "408ba324f554673e214f2ab2f1d044695ad32bfb2cc3b81dd248b961d1daba09",
+    "size_bytes": 1809648,
+    "note": "Recorded 2026-09-15 from two clean FORCE=1 builds with the SDL Wayland define that agreed byte for byte. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   }
 }

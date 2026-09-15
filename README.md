@@ -86,10 +86,9 @@ coordinates are demonstrated on hardware during qualification.
 - MLP1 only.
 - `.nds` and `.zip` content. DSperate does not read `.7z`, and the NDS system
   passes archives through, so a `.7z` is not playable.
-- The toolchain's SDL2 sysroot does not currently enable the Wayland client
-  build, so the optional Wayland dmabuf scanout tier is not compiled. The SDL
-  renderer path runs under `SDL_VIDEODRIVER=wayland` instead. Enabling the tier
-  needs an SDL2 with Wayland in the toolchain sysroot.
+- The Wayland dmabuf scanout tier is compiled in, but its device qualification
+  (dma-heap allocation, Weston dmabuf import, orientation and performance) is
+  outstanding. The SDL window-surface route is the fallback.
 - No bundled games, BIOS or firmware.
 
 ## Licence

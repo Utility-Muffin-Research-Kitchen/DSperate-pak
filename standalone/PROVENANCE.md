@@ -29,7 +29,8 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_TESTS` | `OFF` | no test binaries ship |
 | `DSPERATE_HEADLESS` | `OFF` | the measurement harness does not ship |
 | `DSPERATE_CHEEVOS` | `ON` | upstream default; libcurl is `dlopen`ed at runtime, not linked |
-| `DSPERATE_WAYLAND` | `ON` | request the Wayland dmabuf tier (see below) |
+| `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
+| `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
 | `DSPERATE_CHEEVOS_VERSION` | `1.15.1` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
@@ -56,20 +57,31 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | | |
 | --- | --- |
 | File | `build/standalone/dsperate` |
-| sha256 | `bfdde65e4d00cb566ce1f12757816aa778450184bd62f8bf52d1bd029fe9a936` |
-| Size | 1,779,872 bytes |
+| sha256 | `408ba324f554673e214f2ab2f1d044695ad32bfb2cc3b81dd248b961d1daba09` |
+| Size | 1,809,648 bytes |
 | Reproduced | two clean `FORCE=1` builds agreed byte for byte (2026-09-15) |
 
-## The Wayland dmabuf tier is not built
+## The Wayland dmabuf tier is built
 
 The MLP1's own `libSDL2-2.0.so.0` (2.28.5) is built with its Wayland video
 driver, but the toolchain sysroot's SDL2 2.28.5 is a KMSDRM-only build:
-`SDL_config.h` leaves `SDL_VIDEO_DRIVER_WAYLAND` undefined. DSperate's CMake
-check for `SDL_SysWMinfo`'s Wayland member therefore fails, and the dmabuf
-scanout tier is compiled out (the configure log says so). The SDL renderer path
-is still built, and under `SDL_VIDEODRIVER=wayland` it runs as an ordinary
-fullscreen Wayland window that Weston transforms.
+`SDL_config.h` leaves `SDL_VIDEO_DRIVER_WAYLAND` undefined, so `SDL_syswm.h`
+hides `SDL_SysWMinfo`'s Wayland fields and DSperate's dmabuf tier cannot
+compile against those headers.
 
-Building the dmabuf tier needs an SDL2 with Wayland in the toolchain sysroot
-(`BR2_PACKAGE_SDL2_WAYLAND=y` in `mlp1-toolchain`'s Buildroot defconfig). That
-is a toolchain change, tracked separately, not a change to this pak.
+The build defines `SDL_VIDEO_DRIVER_WAYLAND=1` for this pak only. That exposes
+the header fields; it does not, and cannot, add a Wayland driver to a runtime
+SDL that lacks one. The fields live in SDL's public `SDL_SysWMinfo` union,
+whose reserved space is the same whether or not the macro is set, and the
+binary is dynamically linked to the device's Wayland-capable SDL. The dmabuf
+tier loads `libwayland-client.so.0` with `dlopen` at runtime, so `libwayland`
+is not a link-time dependency.
+
+Evidence in the pinned artifact: `strings` shows `zwp_linux_dmabuf_v1`,
+`zwp_linux_dmabuf_feedback_v1`, `/dev/dma_heap` and `libwayland-client.so.0`,
+and the `NEEDED` set is unchanged from the window-surface-only build. The build
+also fails if CMake's Wayland probe or the compilation of `display_wl.cpp`
+does not confirm the real tier, so a silently stubbed build cannot ship.
+
+The dmabuf allocation, Weston import, orientation and performance are qualified
+on the device separately; the SDL window-surface route remains the fallback.
