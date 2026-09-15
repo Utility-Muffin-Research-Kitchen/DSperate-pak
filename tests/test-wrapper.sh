@@ -81,6 +81,18 @@ run_wrapper "$SD/Roms/NDS/Other/Game (USA).nds"
 GAME_DIRS="$(find "$SD/.userdata/mlp1/dsperate/games" -mindepth 1 -maxdepth 1 -type d | wc -l | tr -d ' ')"
 if [ "$GAME_DIRS" = "2" ]; then pass; else fail "two same-named ROMs got separate game keys (got $GAME_DIRS)"; fi
 
+# --- stick deadzone follows the calibration state ----------------------------
+# Raw pad (no inherited roster): DSperate's own deadzone is the only one.
+check_contains "$GAME_INI" "stick_deadzone = 12000" "raw fallback deadzone"
+# Calibrated virtual pad: the proxy already deadzoned and normalized, so
+# DSperate must not apply a second deadzone.
+mkdir -p "$SD/.userdata/mlp1/input"
+printf '{"version":1,"left":{"x_min":-100,"x_max":100,"y_min":-100,"y_max":100}}\n' \
+    >"$SD/.userdata/mlp1/input/loong-gamepad-calibration.json"
+SDL_JOYSTICK_DEVICE=/dev/input/event5 run_wrapper "$ROM"
+check_contains "$GAME_INI" "stick_deadzone = 0" "calibrated virtual pad deadzone"
+rm -f "$SD/.userdata/mlp1/input/loong-gamepad-calibration.json"
+
 # --- optional BIOS -----------------------------------------------------------
 : >"$SD/BIOS/NDS/nds_bios_arm9.bin"
 : >"$SD/BIOS/NDS/nds_bios_arm7.bin"

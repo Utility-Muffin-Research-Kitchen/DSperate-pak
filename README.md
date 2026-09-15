@@ -82,6 +82,10 @@ The MLP1 profile:
   responding. Quit is also in DSperate's pause menu.
 - The stick moves the stylus. The MLP1 has one stick, on the left, and no R3,
   so nothing is mapped to the right stick. The d-pad is the d-pad.
+- The stick is the calibrated one. Leaf hands the emulator Jawaka's virtual
+  pad, already normalized through the stick-calibration profile with the centre
+  zeroed, so DSperate does not add a second deadzone. Without a profile the
+  wrapper falls back to DSperate's own deadzone.
 - R2 taps the screen and L2 is a second tap, for touch games. Hold Select and
   press R2 to fast-forward.
 - The face buttons follow the printed labels.

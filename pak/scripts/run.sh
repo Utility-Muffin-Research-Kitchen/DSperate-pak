@@ -175,6 +175,24 @@ ini_set "$GAME_INI" paths states "$STATES_DIR"
 ini_set "$GAME_INI" paths screenshots "$SHOTS_DIR"
 ini_set "$GAME_INI" paths cache "$CACHE_DIR"
 
+# Stick deadzone. When Jawaka hands us its grabbed virtual pad AND a calibration
+# profile is installed, the proxy normalizes ABS_X/ABS_Y through that profile:
+# the centre becomes exactly zero and the proxy already applies the profile's
+# deadzone before scaling to the full range. DSperate's own deadzone would then
+# be a second one over the normalized value, eating a large part of the travel,
+# so it is disabled. Without the virtual pad (a direct run) or without a profile
+# (the proxy forwards raw values), DSperate's deadzone is the only one and the
+# raw fallback applies.
+CAL_PROFILE="$USERDATA_PATH/input/loong-gamepad-calibration.json"
+STICK_DEADZONE=12000
+if [ -n "${SDL_JOYSTICK_DEVICE:-}" ] && [ -f "$CAL_PROFILE" ] &&
+   grep -q '"x_min"' "$CAL_PROFILE" 2>/dev/null &&
+   grep -q '"y_min"' "$CAL_PROFILE" 2>/dev/null; then
+    STICK_DEADZONE=0
+fi
+ini_set "$GAME_INI" pad stick_deadzone "$STICK_DEADZONE"
+log "stick deadzone $STICK_DEADZONE (calibrated virtual pad: $([ "$STICK_DEADZONE" = 0 ] && echo yes || echo no))"
+
 # --- presentation ------------------------------------------------------------
 # Weston owns the panel transform on MLP1, so the emulator runs a plain
 # fullscreen Wayland window and never rotates the output itself. DS_ROTATE is
