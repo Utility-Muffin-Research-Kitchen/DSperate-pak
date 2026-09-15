@@ -1,0 +1,96 @@
+name: ci
+
+# Builds the pinned DSperate binary, packages the pak, and validates it against
+# the content-pak contract at a pinned leaf-contracts SHA.
+#
+# Nothing here assumes a UMRK workspace layout: the runner starts from a bare
+# clone of this repository, exactly like an outside contributor's machine.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+env:
+  # Pin the contract, not a branch. A moving contract that silently changes what
+  # "valid" means is the thing this pin exists to prevent; bumping it is a
+  # reviewed commit here.
+  CONTRACT_REF: 699ce2dbced68c8f2529c3a5ffc51dda106e2df7
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the pinned contract
+        uses: actions/checkout@v4
+        with:
+          repository: Utility-Muffin-Research-Kitchen/leaf-contracts
+          ref: ${{ env.CONTRACT_REF }}
+          path: .contract
+
+      - name: Validate pak.json against CONTENT-1
+        run: make validate CONTRACT_DIR="$PWD/.contract"
+
+      - name: Refuse a launch.sh
+        run: |
+          # This repository is a PURE content pak. A launch.sh would quietly
+          # turn it into a hybrid and change how both the storefront and the
+          # launcher treat it.
+          if [ -e pak/launch.sh ]; then
+            echo "pak/launch.sh present: this is meant to be a pure content pak" >&2
+            exit 1
+          fi
+
+      - name: Refuse a path that escapes the repository
+        run: |
+          # The whole point of this repository is that someone can clone it and
+          # build. A '../' in the build system means they cannot.
+          if grep -REn '\.\./(Cores-spruce|Leaf|Jawaka|Catastrophe|umrk-workspace|mlp1-toolchain|Fun-Drastic)' \
+               Makefile standalone scripts tests .github 2>/dev/null; then
+            echo "build system references a sibling checkout" >&2
+            exit 1
+          fi
+          echo "no sibling-checkout references"
+
+  build:
+    runs-on: ubuntu-latest
+    # The build is long. Keep it off the PR path but never let main drift.
+    if: github.event_name != 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the pinned DSperate binary
+        run: make standalone
+
+      - name: Check the launch wrapper
+        run: make test-wrapper
+
+      - name: Package and hash
+        run: make dist-pakrat
+
+      - name: Corresponding source (GPLv3)
+        run: make dist-source
+
+      - name: Check out the pinned contract
+        uses: actions/checkout@v4
+        with:
+          repository: Utility-Muffin-Research-Kitchen/leaf-contracts
+          ref: ${{ env.CONTRACT_REF }}
+          path: .contract
+
+      - name: Validate the PACKAGED pak strictly
+        run: |
+          python3 scripts/validate-pak.py \
+            --contract "$PWD/.contract" \
+            --pak build/package/DSperate.pak --packaged
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DSperate-pak
+          path: |
+            build/dist/DSperate.mlp1.pak.zip
+            build/dist/dsperate-corresponding-source.tar.gz
+            build/dist/upstream.lock.json

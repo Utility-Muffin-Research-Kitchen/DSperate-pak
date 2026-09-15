@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "note": "Everything needed to reproduce the shipped DSperate binary. A fresh clone of this repository plus Docker is the whole toolchain: no sibling checkout, no locally built image, no opaque downloaded binary. DSperate itself is unpatched. `make standalone` refuses a source archive or artifact whose sha256 does not match this file.",
+  "core": {
+    "id": "dsperate",
+    "source_url": "https://github.com/beebono/DSperate.git",
+    "source_tag": "v1.15.1",
+    "source_commit": "4076a9ec0be9f649eb79fcd9e554d2cb48316d70",
+    "license": "GPL-3.0-or-later",
+    "license_path_in_source": "LICENSE"
+  },
+  "build": {
+    "backend": "sdl",
+    "sdl2": "device-provided libSDL2-2.0.so.0, linked dynamically; the MLP1 ships 2.28.5",
+    "language": "C++17, upstream CMake/Ninja build",
+    "source_date_epoch": 1789088321,
+    "source_date_note": "The pinned commit's committer timestamp.",
+    "cheevos_version": "1.15.1",
+    "cheevos_version_note": "Passed explicitly because a shallow checkout has no tags for upstream's `git describe` fallback.",
+    "cmake": [
+      "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+      "-DCMAKE_TOOLCHAIN_FILE=<standalone>/mlp1-toolchain.cmake",
+      "-DDSPERATE_TESTS=OFF",
+      "-DDSPERATE_HEADLESS=OFF",
+      "-DDSPERATE_CHEEVOS=ON",
+      "-DDSPERATE_WAYLAND=ON",
+      "-DDSPERATE_CHEEVOS_VERSION=1.15.1"
+    ]
+  },
+  "toolchain": {
+    "image": "ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:latest",
+    "digest": "sha256:66aac16fb8b07e663c9b4d66970f272df195a6eba98dfad8286eabbaa617faf9",
+    "cross_prefix": "aarch64-buildroot-linux-gnu",
+    "target": "aarch64 Cortex-A55, glibc 2.38 (Miniloong Pocket 1 / RK3566)"
+  },
+  "device": {
+    "glibc_ceiling": "2.38",
+    "allowed_libraries": "standalone/device-libs.txt",
+    "checked": "2026-09-15 on an MLP1 running Leaf 0.12.0-beta.1 (LoongOS rootfs; glibc 2.38, SDL 2.28.5, both matching the toolchain sysroot for the core runtime libraries)"
+  },
+  "artifact": {
+    "file_name": "dsperate",
+    "sha256": "bfdde65e4d00cb566ce1f12757816aa778450184bd62f8bf52d1bd029fe9a936",
+    "size_bytes": 1779872,
+    "note": "Recorded 2026-09-15 from two clean FORCE=1 builds in the digest-pinned toolchain that agreed byte for byte. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+  }
+}
