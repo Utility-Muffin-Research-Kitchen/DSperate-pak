@@ -80,8 +80,11 @@ The MLP1 profile:
   Menu plus Volume, still belongs to the launcher.
 - Hold Menu for about three seconds to return to Leaf if the emulator stops
   responding. Quit is also in DSperate's pause menu.
-- The right stick moves the stylus, the left stick doubles as the d-pad, and
-  the face buttons follow the printed labels.
+- The stick moves the stylus. The MLP1 has one stick, on the left, and no R3,
+  so nothing is mapped to the right stick. The d-pad is the d-pad.
+- R2 taps the screen and L2 is a second tap, for touch games. Hold Select and
+  press R2 to fast-forward.
+- The face buttons follow the printed labels.
 
 The pause menu is driven with the DS buttons: A confirms, B backs out, and the
 d-pad moves.

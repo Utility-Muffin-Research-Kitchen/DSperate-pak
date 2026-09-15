@@ -11,7 +11,8 @@
 #   make dist-source    GPL corresponding-source archive for the shipped binary
 #   make validate       check pak.json against the content-pak contract
 #   make test-wrapper   check the launch wrapper (no build needed)
-#   make check          validate + test-wrapper + package + validate the packaged tree
+#   make test-profile   check the MLP1 default pad profile
+#   make check          validate + tests + package + validate the packaged tree
 #   make clean          remove build/ outputs (keeps the cached source and build)
 #   make distclean      remove build/ entirely, including the source clone
 
@@ -30,7 +31,7 @@ CONTRACT_REPO ?= https://github.com/Utility-Muffin-Research-Kitchen/leaf-contrac
 CONTRACT_REF ?= 699ce2dbced68c8f2529c3a5ffc51dda106e2df7
 CONTRACT_DIR ?= $(BUILD)/contract
 
-.PHONY: all standalone verify-standalone package-mlp1 dist-pakrat dist-source validate test-wrapper check clean distclean help
+.PHONY: all standalone verify-standalone package-mlp1 dist-pakrat dist-source validate test-wrapper test-profile check clean distclean help
 
 all: dist-pakrat
 
@@ -109,7 +110,10 @@ validate: | $(CONTRACT_DIR)
 test-wrapper:
 	@sh "$(REPO_ROOT)/tests/test-wrapper.sh"
 
-check: validate test-wrapper package-mlp1
+test-profile:
+	@sh "$(REPO_ROOT)/tests/test-profile.sh"
+
+check: validate test-wrapper test-profile package-mlp1
 	@python3 "$(REPO_ROOT)/scripts/validate-pak.py" \
 		--contract "$(CONTRACT_DIR)" --pak "$(PACKAGE)" --packaged
 
