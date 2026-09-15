@@ -70,9 +70,21 @@ wrapper passes them to DSperate. No BIOS or firmware is bundled here.
 
 ## Controls
 
-The defaults are DSperate's own. The MLP1 profile, including the stylus stick
-and the hotkey modifier, is settled in the plan's controls step and documented
-in the launcher once qualified.
+The MLP1 profile:
+
+- Select is the hotkey modifier. Hold Select and press Start to open
+  DSperate's own pause menu, and use it with the other pad buttons for the
+  emulator's hotkeys (save state, load state, fast forward, layout, and so on).
+- Menu opens DSperate's pause menu. A single Menu tap becomes one Guide press,
+  because this pak declares `supports_menu: true`. Menu inside a chord, such as
+  Menu plus Volume, still belongs to the launcher.
+- Hold Menu for about three seconds to return to Leaf if the emulator stops
+  responding. Quit is also in DSperate's pause menu.
+- The right stick moves the stylus, the left stick doubles as the d-pad, and
+  the face buttons follow the printed labels.
+
+The pause menu is driven with the DS buttons: A confirms, B backs out, and the
+d-pad moves.
 
 ## Display
 

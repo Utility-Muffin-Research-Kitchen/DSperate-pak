@@ -20,7 +20,7 @@
         "display_name": "DSperate",
         "type": "path",
         "path": "scripts/run.sh",
-        "supports_menu": false,
+        "supports_menu": true,
         "supports_savestate": false,
         "supports_disk_control": false
       }
