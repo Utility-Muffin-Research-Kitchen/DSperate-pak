@@ -47,11 +47,54 @@ CACHE_DIR="$STATE_ROOT/cache"
 RUNTIME_DIR="$UMRK_RUNTIME_PATH/dsperate"
 GLOBAL_INI="$STATE_ROOT/dsperate.ini"
 BIN="$ROOT_DIR/bin/dsperate"
+NOTICE_BIN="$ROOT_DIR/bin/dsperate-notice"
 LOG_FILE="$LOGS_PATH/dsperate.log"
-
-die() { echo "dsperate: $*" >&2; log "$*"; exit 1; }
+CACHE_ROOT="$STATE_ROOT/cache"
+NOTICE_FONT=""
 
 log() { printf 'dsperate: %s\n' "$*" 2>/dev/null >>"$LOG_FILE" || true; }
+
+# The launcher's font, resolved the way Jawaka's on-screen display resolves it:
+# CAT_FONT_PATH (absolute, or relative to CAT_FONTS_DIR), then the launcher res
+# tree. The notice program resolves the same fallbacks itself if this is empty.
+if [ -n "${CAT_FONT_PATH:-}" ]; then
+    case "$CAT_FONT_PATH" in
+        /*) [ -r "$CAT_FONT_PATH" ] && NOTICE_FONT="$CAT_FONT_PATH" ;;
+        *) [ -n "${CAT_FONTS_DIR:-}" ] && [ -r "$CAT_FONTS_DIR/$CAT_FONT_PATH" ] &&
+               NOTICE_FONT="$CAT_FONTS_DIR/$CAT_FONT_PATH" ;;
+    esac
+fi
+if [ -z "$NOTICE_FONT" ] && [ -n "${UMRK_LAUNCHER_PATH:-}" ] &&
+   [ -r "$UMRK_LAUNCHER_PATH/res/font.ttf" ]; then
+    NOTICE_FONT="$UMRK_LAUNCHER_PATH/res/font.ttf"
+fi
+
+# Show the pak's fullscreen message when a launch cannot proceed. Leaf has no
+# error surface a content pak can use, so this is the only way the player sees
+# why: without it a refused archive is a silent return to the launcher. Best
+# effort -- a missing notice binary or a disabled test run must not become a
+# second failure.
+show_notice() {
+    [ -n "${DS_NO_NOTICE:-}" ] && return 0
+    [ -x "$NOTICE_BIN" ] || return 0
+    if [ -n "$NOTICE_FONT" ]; then
+        SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}" \
+        SDL_JOYSTICK_DISABLE_UDEV=1 \
+        "$NOTICE_BIN" --font "$NOTICE_FONT" --timeout "${DS_NOTICE_TIMEOUT:-10}" \
+            "$@" >>"$LOG_FILE" 2>&1 || true
+    else
+        SDL_VIDEODRIVER="${SDL_VIDEODRIVER:-wayland}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}" \
+        SDL_JOYSTICK_DISABLE_UDEV=1 \
+        "$NOTICE_BIN" --timeout "${DS_NOTICE_TIMEOUT:-10}" \
+            "$@" >>"$LOG_FILE" 2>&1 || true
+    fi
+}
+
+die() { echo "dsperate: $*" >&2; log "$*"; show_notice "DSperate could not start" "$*"; exit 1; }
 
 usage() {
     echo "usage: $0 ROM" >&2
@@ -75,6 +118,23 @@ fi
 if [ ! -x "$BIN" ]; then
     echo "dsperate: emulator binary missing: $BIN" >&2
     exit 1
+fi
+
+# Extension, lower-cased, for the archive checks below.
+ROM_EXT=""
+case "$ROM_PATH" in
+    *.*) ROM_EXT="$(printf '%s' "${ROM_PATH##*.}" | tr '[:upper:]' '[:lower:]')" ;;
+esac
+
+# DSperate reads .nds and .zip, not .7z. The NDS system passes archives through,
+# so a .7z reaches here; refusing it with an on-screen explanation is the point,
+# not a log line and a silent return to the launcher.
+if [ "$ROM_EXT" = "7z" ]; then
+    log "refused unsupported .7z archive: $ROM_PATH"
+    show_notice "This archive is not supported" \
+        "DSperate does not read .7z files." \
+        "Extract the ROM to a .nds file, or choose another Nintendo DS emulator."
+    exit 0
 fi
 
 # --- game identity -----------------------------------------------------------
@@ -290,6 +350,104 @@ ini_set "$GAME_INI" paths screenshots "$SHOTS_DIR" || die "cannot bind screensho
 ini_set "$GAME_INI" paths cache "$CACHE_DIR" || die "cannot bind cache path"
 ini_set "$GAME_INI" paths firmware_override "$GAME_DIR/firmware.ovr" || die "cannot bind firmware sidecar"
 
+# --- archive policy ----------------------------------------------------------
+# The emulator unpacks a deflated ROM from a .zip under paths.cache, which the
+# per-game file above pins to this game's directory. Upstream would prefer a
+# .dsperate directory beside the ROM when that is writable; --cache-root-only
+# makes the configured root authoritative. The per-directory cap it enforces is
+# per game, so the cross-game total and the free-space check live here, before
+# anything is written. --single-rom makes an archive with more than one .nds a
+# refusal rather than a database guess.
+# Overridable so the wrapper tests can exercise the bounds without a 1 GiB
+# fixture; the shipped defaults are the pak policy.
+TOTAL_CACHE_MB="${DS_TOTAL_CACHE_MB:-1024}"
+PER_ROM_CACHE_MB="${DS_PER_ROM_CACHE_MB:-512}"
+CACHE_MARGIN_MB="${DS_CACHE_MARGIN_MB:-16}"
+
+# Total size in KiB of every game cache except the one named.
+cache_other_kb() {
+    _keep="${1%/}"
+    _sum=0
+    for _d in "$CACHE_ROOT"/v2-*; do
+        [ -d "$_d" ] || continue
+        [ "$_d" = "$_keep" ] && continue
+        _sz="$(du -sk "$_d" 2>/dev/null | awk '{print $1}')"
+        [ -n "$_sz" ] && _sum=$((_sum + _sz))
+    done
+    printf '%s' "$_sum"
+}
+
+# The least recently used other game cache directory, or nothing.
+cache_oldest_other() {
+    _keep="${1%/}"
+    _victim=""
+    for _d in $(ls -dt "$CACHE_ROOT"/v2-* 2>/dev/null); do
+        [ -d "$_d" ] || continue
+        [ "$_d" = "$_keep" ] && continue
+        _victim="$_d"   # last in newest-first order is the oldest
+    done
+    printf '%s' "$_victim"
+}
+
+cache_free_kb() {
+    df -Pk "$CACHE_ROOT" 2>/dev/null | awk 'NR == 2 { print $4 }'
+}
+
+# Evict other games' caches until $1 KiB fit the total budget and the card, or
+# refuse the launch with an explanation.
+require_cache_room() {
+    _need="$1"
+    if [ "$_need" -gt $((PER_ROM_CACHE_MB * 1024)) ]; then
+        log "ROM needs ${_need} KiB, over the ${PER_ROM_CACHE_MB} MiB per-ROM cache limit"
+        show_notice "This game is too large to unpack" \
+            "It needs more space than DSperate's per-game cache allows." \
+            "Set a larger cache_mb in your configuration, or use another emulator."
+        exit 0
+    fi
+    _budget=$((TOTAL_CACHE_MB * 1024))
+    _margin=$((CACHE_MARGIN_MB * 1024))
+    while :; do
+        _others="$(cache_other_kb "$CACHE_DIR")"
+        _free="$(cache_free_kb)"
+        [ -n "$_free" ] || _free=0
+        if [ $((_others + _need)) -le "$_budget" ] &&
+           [ "$_free" -ge $((_need + _margin)) ]; then
+            return 0
+        fi
+        _victim="$(cache_oldest_other "$CACHE_DIR")"
+        [ -n "$_victim" ] || break
+        rm -rf "$_victim" || break
+        log "cache evicted for space: $_victim"
+    done
+    log "not enough room to unpack: need=${_need}KiB free=${_free}KiB other=${_others}KiB budget=${_budget}KiB"
+    show_notice "Not enough space to unpack this game" \
+        "Free space on the card, or extract the ROM to .nds yourself." \
+        "DSperate keeps a cache of unpacked zipped games."
+    exit 0
+}
+
+if [ "$ROM_EXT" = "zip" ]; then
+    if ! _report="$("$BIN" --config "$GLOBAL_INI" --cache-root-only --single-rom \
+            --inspect-cart "$ROM_PATH" 2>"$RUNTIME_DIR/inspect.err")"; then
+        _reason="$(cat "$RUNTIME_DIR/inspect.err" 2>/dev/null)"
+        [ -n "$_reason" ] || _reason="the archive could not be read"
+        log "cannot open archive: $_reason"
+        show_notice "This archive cannot be opened" "$_reason" \
+            "Extract the ROM to a .nds file, or choose another emulator."
+        exit 0
+    fi
+    _extract="$(printf '%s\n' "$_report" | sed -n 's/^extract=//p')"
+    _bytes="$(printf '%s\n' "$_report" | sed -n 's/^bytes=//p')"
+    case "$_bytes" in ''|*[!0-9]*) die "cannot size the archive for the cache" ;; esac
+    if [ "$_extract" = "yes" ]; then
+        require_cache_room "$(( (_bytes + 1023) / 1024 ))"
+    fi
+else
+    # A loose .nds needs no unpacking: --inspect-cart still reports it, but the
+    # cache checks and the single-ROM rule do not apply to it.
+    :
+fi
+
 # --- presentation ------------------------------------------------------------
 # Weston owns the panel transform on MLP1, so the emulator runs a plain
 # fullscreen Wayland window and never rotates the output itself. DS_ROTATE is
@@ -323,7 +481,7 @@ FW="$(bios_file "$NDS_BIOS_DIR/nds_firmware.bin")"
 # Battery saves go to a per-source, per-game file under Saves/DSperate; the
 # states and cache paths were set above. --no-disp and --no-fbdev keep the
 # direct-panel tiers out of the way; --no-mic disables real capture.
-set -- --config "$GLOBAL_INI" \
+set -- --config "$GLOBAL_INI" --cache-root-only --single-rom \
        --save "$SAVES_DIR/$ROM_STEM.sav" \
        --no-disp --no-fbdev --fullscreen --no-mic
 

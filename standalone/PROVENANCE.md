@@ -11,7 +11,36 @@ Everything here is measured from the build, not from memory.
 | Tag | `v1.15.1` |
 | Commit | `4076a9ec0be9f649eb79fcd9e554d2cb48316d70` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
-| Patches | none; the tree builds unmodified |
+| Patches | `patches/0001-pak-cache-and-archive-policy.patch` (sha256-locked; see below) |
+
+## Patch
+
+`standalone/patches/0001-pak-cache-and-archive-policy.patch` is the pak's only
+change to upstream. It is locked by sha256 in `upstream.lock.json`; the build
+applies it to the pinned commit and refuses a patch whose hash differs.
+
+It adds three opt-in command-line flags and the two settings behind them:
+
+- `--cache-root-only` (`[cart] cache_root_only`): a configured `paths.cache` is
+  the only place a deflated archive may be unpacked, never a `.dsperate`
+  directory beside a writable ROM. The pak pins the cache to
+  `$USERDATA_PATH/dsperate/cache/<key>/`.
+- `--single-rom` (`[cart] single_nds`): refuse an archive that holds more than
+  one eligible `.nds` entry instead of picking one by game database and
+  revision. The pak wants one unambiguous game per archive.
+- `--inspect-cart FILE`: print `kind`, `extract`, `bytes` and `entry` for a
+  cartridge and exit without booting anything, or exit non-zero with the reason
+  on stderr. The wrapper sizes and bounds its cache with this and refuses an
+  unreadable archive before a window opens.
+
+The same patch rejects an `.nds` entry whose name is absolute or carries a `..`
+component. Upstream already refuses encryption, zip64 and unknown compression;
+this closes the remaining path-shaped case, and the extraction target was never
+derived from the entry name in any case.
+
+Nothing here changes upstream's default behavior: every flag defaults off, so a
+build or launch that does not ask for the pak policy behaves exactly as the
+pinned commit does.
 
 ## Toolchain and flags
 
@@ -52,14 +81,21 @@ Every one is provided by the MLP1 in `/lib`; the pak bundles no shared
 libraries. The artefact is AArch64, stripped, carries no RPATH/RUNPATH and its
 highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 
-## Artifact
+## Artifacts
 
-| | |
-| --- | --- |
-| File | `build/standalone/dsperate` |
-| sha256 | `408ba324f554673e214f2ab2f1d044695ad32bfb2cc3b81dd248b961d1daba09` |
-| Size | 1,809,648 bytes |
-| Reproduced | two clean `FORCE=1` builds agreed byte for byte (2026-09-15) |
+| | `bin/dsperate` | `bin/dsperate-notice` |
+| --- | --- | --- |
+| Source | upstream at the pinned commit, plus the locked patch | `standalone/notice/notice.c` (this repository) |
+| Licence | GPL-3.0-or-later | MIT |
+| sha256 | `d2cb62947dd65d231b5124ac2eef2d8f560a50ab6e937686965e53aa9ee8fb63` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 1,809,664 bytes | 14,224 bytes |
+| Reproduced | clean `FORCE=1` builds agreed byte for byte | clean `FORCE=1` builds agreed byte for byte |
+
+The notice program is the fullscreen message the wrapper shows when a launch
+cannot proceed. It links only SDL2 and SDL_ttf, both provided by the MLP1, and
+resolves the launcher's own font at runtime; the pak bundles neither a library
+nor a font. It is verified with the same AArch64/stripped/glibc/allowlist checks
+as the emulator (see `build/standalone/verify-notice.txt`).
 
 ## The Wayland dmabuf tier is built
 

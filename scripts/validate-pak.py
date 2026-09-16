@@ -130,18 +130,19 @@ def main() -> int:
         # The wrapper is the manifest-declared path core; the compiled binary,
         # its defaults and the licence notice ship beside it. Check them
         # explicitly so a package missing any of them cannot pass.
-        for rel in ("scripts/run.sh", "bin/dsperate"):
+        for rel in ("scripts/run.sh", "bin/dsperate", "bin/dsperate-notice"):
             path = pak_dir / rel
             if not path.is_file() or not (path.stat().st_mode & 0o111):
                 print(f"FAIL package: missing or non-executable {rel}")
                 return 1
-        if not (pak_dir / "defaults" / "dsperate.ini").is_file():
-            print("FAIL package: missing defaults/dsperate.ini")
-            return 1
+        for rel in ("defaults/dsperate.ini", "defaults/config.version"):
+            if not (pak_dir / rel).is_file():
+                print(f"FAIL package: missing {rel}")
+                return 1
         if not (pak_dir / "LICENSE-DSPERATE.txt").is_file():
             print("FAIL package: missing LICENSE-DSPERATE.txt")
             return 1
-        print("ok   package: wrapper, binary, defaults and licence notice")
+        print("ok   package: wrapper, binaries, defaults and licence notice")
 
     # Branding assets are intentionally not NDS system art declarations.
     for rel in ("res/icon.png", "art/DSperate-flat.png", "art/DSperate-photo.png",

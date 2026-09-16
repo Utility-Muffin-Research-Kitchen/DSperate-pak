@@ -8,7 +8,7 @@
 #   /out         the stripped binary and the verification report
 set -euo pipefail
 
-: "${CROSS:?}" "${SOURCE_DATE_EPOCH:?}" "${GLIBC_CEILING:?}" "${ARTIFACT:?}" "${CHEEVOS_VERSION:?}"
+: "${CROSS:?}" "${SOURCE_DATE_EPOCH:?}" "${GLIBC_CEILING:?}" "${ARTIFACT:?}" "${CHEEVOS_VERSION:?}" "${NOTICE_ARTIFACT:?}"
 export SOURCE_DATE_EPOCH
 export PATH="/opt/mlp1-toolchain/bin:$PATH"
 
@@ -86,3 +86,22 @@ log "confirmed display_wl.cpp (real dmabuf tier) compiled"
 log "verifying the binary"
 bash /standalone/verify-binary.sh "/out/$ARTIFACT" /standalone/device-libs.txt "$GLIBC_CEILING" \
   | tee /out/verify-binary.txt
+
+# The pak's own small notice program: the fullscreen message the wrapper shows
+# when a launch cannot proceed. It is this repository's source, not upstream's,
+# and links only SDL2 and SDL_ttf, both device-provided.
+[ -f /standalone/notice/notice.c ] || { echo "build-in-container: notice source missing" >&2; exit 1; }
+log "compiling the notice program"
+# shellcheck disable=SC2086
+"$CROSS-gcc" -O2 -std=c11 -Wall -Wextra -Werror -DSDL_VIDEO_DRIVER_WAYLAND=1 \
+  $(pkg-config --cflags sdl2 SDL2_ttf) -o /out/notice-raw /standalone/notice/notice.c \
+  $(pkg-config --libs sdl2 SDL2_ttf) >/work/notice-build.log 2>&1 || {
+  echo "build-in-container: notice build failed:" >&2
+  tail -40 /work/notice-build.log >&2
+  exit 1
+}
+"$CROSS-strip" --strip-unneeded -o "/out/$NOTICE_ARTIFACT" /out/notice-raw
+rm -f /out/notice-raw
+log "verifying the notice program"
+bash /standalone/verify-binary.sh "/out/$NOTICE_ARTIFACT" /standalone/device-libs.txt "$GLIBC_CEILING" \
+  | tee /out/verify-notice.txt

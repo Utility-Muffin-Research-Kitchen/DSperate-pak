@@ -1,0 +1,259 @@
+diff --git a/src/core/cart/zip.cpp b/src/core/cart/zip.cpp
+index a33ff7d..41f7911 100644
+--- a/src/core/cart/zip.cpp
++++ b/src/core/cart/zip.cpp
+@@ -121,7 +121,27 @@ bool is_zip(const u8* data, size_t size) {
+   return size >= 4 && rd32(data) == SIG_LOCAL;
+ }
+ 
+-bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err) {
++// A name we will not accept even though it is never used as a filesystem
++// path here (the extraction name is derived from the archive, not the entry):
++// an absolute or drive-absolute name, or one with a `..` component. A hostile
++// or malformed archive should fail loudly rather than be silently ignored.
++static bool unsafe_name(const char* name, size_t n) {
++  std::string s(name, n);
++  for (char& c : s) if (c == '\\') c = '/';
++  if (s.empty() || s[0] == '/') return true;
++  if (s.size() >= 2 && s[1] == ':') return true;
++  size_t start = 0;
++  while (start <= s.size()) {
++    const size_t end = s.find('/', start);
++    const std::string part = s.substr(start, end == std::string::npos ? std::string::npos : end - start);
++    if (part == "..") return true;
++    if (end == std::string::npos) break;
++    start = end + 1;
++  }
++  return false;
++}
++
++bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err, bool single) {
+   err.clear();
+   // The end-of-central-directory record is last, but a trailing comment of up
+   // to 64 KB may follow it, so it is found by scanning back over that window.
+@@ -142,7 +162,7 @@ bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err) {
+   std::vector<Entry> cands;
+   size_t p = cd_off;
+   const size_t cd_end = cd_off + cd_size;
+-  size_t nds_seen = 0, skipped_zip64 = 0, skipped_crypt = 0, skipped_method = 0, skipped_huge = 0;
++  size_t nds_seen = 0, skipped_zip64 = 0, skipped_crypt = 0, skipped_method = 0, skipped_huge = 0, skipped_unsafe = 0;
+   for (u32 i = 0; i < count && p + 46 <= cd_end; ++i) {
+     const u8* h = zip + p;
+     if (rd32(h) != SIG_CENTRAL) { err = "corrupt zip (bad central directory entry)"; return false; }
+@@ -160,6 +180,7 @@ bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err) {
+     ++nds_seen;
+     // Reasons an .nds entry cannot be used. Counted rather than fatal: a zip
+     // may hold one usable ROM beside something we cannot read.
++    if (unsafe_name(reinterpret_cast<const char*>(zip + name_off), name_len)) { ++skipped_unsafe; continue; }
+     if (flags & 1) { ++skipped_crypt; continue; }
+     if (csize == 0xFFFFFFFFu || usize == 0xFFFFFFFFu || local_off == 0xFFFFFFFFu) { ++skipped_zip64; continue; }
+     if (method != METHOD_STORE && method != METHOD_DEFLATE) { ++skipped_method; continue; }
+@@ -179,9 +200,11 @@ bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err) {
+     else if (skipped_zip64) err = "the archive is zip64, which is not supported";
+     else if (skipped_method) err = "the .nds file uses an unsupported compression method";
+     else if (skipped_huge) err = "the .nds file in the archive is larger than any DS card";
++    else if (skipped_unsafe) err = "the .nds entry in the archive has an unsafe path";
+     else err = "the .nds file in the archive is too small to be a ROM";
+     return false;
+   }
++  if (single && cands.size() > 1) { err = "the archive holds more than one .nds file"; return false; }
+ 
+   // Pick. One candidate needs no header peek at all -- the common case, and
+   // the expensive one to get wrong, since peeking inflates from the start of
+diff --git a/src/core/cart/zip.h b/src/core/cart/zip.h
+index f0b5d94..af4dfaa 100644
+--- a/src/core/cart/zip.h
++++ b/src/core/cart/zip.h
+@@ -36,8 +36,10 @@ struct ZipEntry {
+ };
+ 
+ // Picks the ROM entry out of `zip`, without reading its payload beyond the
+-// header peek described below. False with a reason in `err`.
+-bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err);
++// header peek described below. False with a reason in `err`. With `single`, an
++// archive holding more than one eligible .nds entry is refused instead of
++// picked from; a launcher that wants one unambiguous game per archive sets it.
++bool find_nds(const u8* zip, size_t size, ZipEntry& entry, std::string& err, bool single = false);
+ 
+ // Produces the entry's uncompressed bytes in order through `sink` (which
+ // returns false to abort), calling `progress` every megabyte or so with the
+diff --git a/src/core/cart/zip_cache.cpp b/src/core/cart/zip_cache.cpp
+index 8a2f051..41133a4 100644
+--- a/src/core/cart/zip_cache.cpp
++++ b/src/core/cart/zip_cache.cpp
+@@ -83,8 +83,18 @@ bool file_size(const std::string& path, u64& size) {
+ }
+ 
+ // Picks the directory the image goes in: beside the archive if that can be
+-// written, else the override. `path` comes back as the image path.
+-bool choose_cache(const std::string& zip_path, const std::string& fallback, std::string& path, std::string& err) {
++// written, else the override. With `require_root` the override is the only
++// candidate, so a configured cache root is authoritative. `path` comes back as
++// the image path.
++bool choose_cache(const std::string& zip_path, const std::string& fallback, bool require_root,
++                  std::string& path, std::string& err) {
++  if (require_root) {
++    if (fallback.empty()) { err = "no cache directory is configured"; return false; }
++    mkdir(fallback.c_str(), 0755);   // may exist; the access check below is the test
++    if (access(fallback.c_str(), W_OK | X_OK) != 0) { err = "cannot write the cache directory " + fallback; return false; }
++    path = fallback + "/" + stem_of(zip_path) + ".nds";
++    return true;
++  }
+   for (const std::string& dir : {dir_of(zip_path) + "/.dsperate", fallback}) {
+     if (dir.empty()) continue;
+     mkdir(dir.c_str(), 0755);   // may exist; the access check below is the test
+@@ -197,7 +207,7 @@ std::unique_ptr<RomSource> open_zip(const std::string& path, ZipOpen& how, std::
+   const u8* zip = archive->page(0);
+   const size_t size = archive->size();
+   ZipEntry e;
+-  if (!find_nds(zip, size, e, err)) return nullptr;
++  if (!find_nds(zip, size, e, err, how.single_entry)) return nullptr;
+   how.chosen = e.name;
+ 
+   if (e.stored()) {
+@@ -210,7 +220,7 @@ std::unique_ptr<RomSource> open_zip(const std::string& path, ZipOpen& how, std::
+   const std::string tag = make_tag(canonical(path), zst, e);
+ 
+   std::string image;
+-  if (!choose_cache(path, how.fallback_dir, image, err)) return nullptr;
++  if (!choose_cache(path, how.fallback_dir, how.require_root, image, err)) return nullptr;
+   const std::string tag_path = image + ".tag", part = image + ".part";
+   how.cache_path = image;
+   sweep_cache(dir_of(image));   // orphans and whatever a previous run left
+diff --git a/src/core/cart/zip_cache.h b/src/core/cart/zip_cache.h
+index 0eda46c..b0b69c3 100644
+--- a/src/core/cart/zip_cache.h
++++ b/src/core/cart/zip_cache.h
+@@ -34,6 +34,13 @@ struct ZipOpen {
+   // Where to put the extracted image when the archive's own directory
+   // cannot be written. Empty: fail instead.
+   std::string fallback_dir;
++  // When true, `fallback_dir` is the only place the image may go: never the
++  // archive's own directory. A launcher that isolates game data wants every
++  // extraction under its own cache root, even when the ROM's card is writable.
++  bool require_root = false;
++  // When true, an archive holding more than one eligible .nds entry is
++  // refused. A launcher that wants one unambiguous game per archive sets it.
++  bool single_entry = false;
+   // The most the cache directory may hold, in bytes, before an extraction
+   // evicts the least recently launched images to make room (0: no limit).
+   // The image being opened is never evicted.
+diff --git a/src/core/nds.cpp b/src/core/nds.cpp
+index 6cb8020..1b18ee4 100644
+--- a/src/core/nds.cpp
++++ b/src/core/nds.cpp
+@@ -326,6 +326,8 @@ bool NDS::load_rom(const std::string& path) {
+   if (zipped) {
+     cart::ZipOpen how;
+     how.fallback_dir = rom_cache_dir;
++    how.require_root = rom_cache_require_root;
++    how.single_entry = rom_single_entry;
+     how.max_bytes = rom_cache_max_bytes;
+     how.progress = rom_progress; how.progress_user = rom_progress_user;
+     how.cancel = rom_cancel;
+diff --git a/src/core/nds.h b/src/core/nds.h
+index daff09d..aa14eba 100644
+--- a/src/core/nds.h
++++ b/src/core/nds.h
+@@ -62,6 +62,8 @@ struct NDS {
+   // callback for the extraction. Both optional; set before load_rom.
+   std::string rom_cache_dir;
+   u64 rom_cache_max_bytes = 0;                 // 0: no limit
++  bool rom_cache_require_root = false;         // the configured cache root is the only one
++  bool rom_single_entry = false;               // refuse an archive with several .nds files
+   cart::ZipProgress rom_progress = nullptr;
+   void* rom_progress_user = nullptr;
+   std::atomic<bool>* rom_cancel = nullptr;     // set from another thread to abandon the extraction
+diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
+index 29ea903..12fbd09 100644
+--- a/src/frontend/sdl/main.cpp
++++ b/src/frontend/sdl/main.cpp
+@@ -49,6 +49,7 @@
+ #include <cstdlib>
+ #include <cstring>
+ #include <fstream>
++#include <memory>
+ #include <thread>
+ #include <atomic>
+ #include <ctime>
+@@ -156,7 +157,10 @@ const char* kUsage =
+     "  --save F        battery save to start from, instead of <rom>.sav\n"
+     "                  (a --replay never writes the save back, so a scene repeats)\n"
+     "  --clear-cache   delete every unpacked zipped game (the .dsperate directories beside the\n"
+-    "                  games and paths.cache) except the one being launched, then run as usual\n";
++    "                  games and paths.cache) except the one being launched, then run as usual\n"
++    "  --cache-root-only  unpack a zipped game only under paths.cache, never beside the archive\n"
++    "  --single-rom    refuse an archive holding more than one .nds file instead of picking one\n"
++    "  --inspect-cart F  print what loading F would need (kind, extract, bytes, entry) and exit\n";
+ 
+ std::string rom_dir_of(const std::string& rom) {
+   const size_t slash = rom.find_last_of('/');
+@@ -906,6 +910,27 @@ const char* extra_default(const char* key, bool pad, const ds::sdl::Config& cfg)
+   return ds::sdl::Input::mod_default(pad);
+ }
+ 
++// --inspect-cart FILE: what launching FILE would need, printed as key=value
++// lines, without booting anything. A launcher uses it to size and bound its
++// extraction cache and to refuse an unreadable archive before a window opens.
++// `single` refuses more than one eligible .nds entry, as the emulator will.
++int inspect_cart(const char* path, bool single) {
++  std::string err;
++  std::unique_ptr<ds::cart::RomSource> src = ds::cart::RomSource::map_file(path, err);
++  if (!src) { std::fprintf(stderr, "dsperate: %s\n", err.c_str()); return 1; }
++  const ds::u8* data = src->page(0);
++  const size_t size = src->size();
++  if (!ds::cart::is_zip(data, size)) {
++    std::printf("kind=nds\nextract=no\nbytes=%llu\n", static_cast<unsigned long long>(size));
++    return 0;
++  }
++  ds::cart::ZipEntry e;
++  if (!ds::cart::find_nds(data, size, e, err, single)) { std::fprintf(stderr, "dsperate: %s\n", err.c_str()); return 1; }
++  std::printf("kind=zip\nextract=%s\nbytes=%llu\nentry=%s\n",
++              e.stored() ? "no" : "yes", static_cast<unsigned long long>(e.usize), e.name.c_str());
++  return 0;
++}
++
+ } // namespace
+ 
+ int main(int argc, char** argv) {
+@@ -913,6 +938,7 @@ int main(int argc, char** argv) {
+   const char* config_arg = nullptr;
+   long frame_limit = 0;
+   const char *record = nullptr, *replay = nullptr, *save_arg = nullptr, *load_state = nullptr;
++  const char* inspect_cart_arg = nullptr;
+   bool clear_cache = false;
+   bool rtc_host = false;              // --rtc-host: a real clock even under a replay (the firmware menu needs one)
+   long stats_from = 0;   // frames run but left out of the timing statistics
+@@ -960,6 +986,12 @@ int main(int argc, char** argv) {
+     else if (arg("--replay")) replay = argv[++i];
+     else if (arg("--save")) save_arg = argv[++i];
+     else if (arg("--load-state")) load_state = argv[++i];
++    else if (arg("--inspect-cart")) inspect_cart_arg = argv[++i];
++    // The two cache policies a launcher can pin for one launch. Set here rather
++    // than in the config so a pak owns them and --inspect-cart agrees with the
++    // load that follows.
++    else if (flag("--cache-root-only")) cli.set("cart.cache_root_only", "true");
++    else if (flag("--single-rom")) cli.set("cart.single_nds", "true");
+     else if (arg("--autosave-png")) cli.set("emu.autosave_png", argv[++i]);
+ #if DSPERATE_CHEEVOS
+     // Turning RetroAchievements on for one run, without editing the config.
+@@ -1019,8 +1051,9 @@ int main(int argc, char** argv) {
+   if (!cfg.load(global_ini) && config_arg) { std::fprintf(stderr, "cannot read %s\n", config_arg); return 2; }
+   auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
+                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.disp", "video.fbdev", "video.vsync", "audio.enabled", "audio.volume",
+-                                              "audio.mic", "emu.jit", "emu.quantum", "emu.timing_oc", "emu.cpu_oc", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
++                                              "audio.mic", "emu.jit", "emu.quantum", "emu.timing_oc", "emu.cpu_oc", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
+   apply_cli();
++  if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
+   const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7"), fw = cfg.str("paths.firmware");
+ 
+   // No ROM boots the firmware's own menu. A file called BootMenu.nds selects
+@@ -1289,6 +1322,8 @@ sdl_ready:
+   // much the cache may hold, and whether it survives the session
+   // (cart/zip_cache.h; config [paths] cache, [cart] cache_mb, cache).
+   nds.rom_cache_dir = cfg.str("paths.cache", "");
++  nds.rom_cache_require_root = cfg.flag("cart.cache_root_only", false);
++  nds.rom_single_entry = cfg.flag("cart.single_nds", false);
+   nds.rom_cache_max_bytes = static_cast<u64>(std::max(0, cfg.num("cart.cache_mb", 2048))) << 20;
+   const bool cache_session = cfg.str("cart.cache", "keep") == "session";
+   // --clear-cache: every unpacked image goes, except the one this launch is

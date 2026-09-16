@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "note": "Everything needed to reproduce the shipped DSperate binary. A fresh clone of this repository plus Docker is the whole toolchain: no sibling checkout, no locally built image, no opaque downloaded binary. DSperate itself is unpatched. `make standalone` refuses a source archive or artifact whose sha256 does not match this file.",
+  "note": "Everything needed to reproduce the shipped DSperate binary. A fresh clone of this repository plus Docker is the whole toolchain: no sibling checkout, no locally built image, no opaque downloaded binary. DSperate is built from the pinned commit with the pak's patches in `patches/`, applied in order; each is locked by sha256 and the build refuses a mismatch. `make standalone` refuses a source archive or artifact whose sha256 does not match this file.",
   "core": {
     "id": "dsperate",
     "source_url": "https://github.com/beebono/DSperate.git",
@@ -30,6 +30,13 @@
       "-DDSPERATE_CHEEVOS_VERSION=1.15.1"
     ]
   },
+  "patches": [
+    {
+      "file": "0001-pak-cache-and-archive-policy.patch",
+      "sha256": "8eead05553f414ef9d9729070225cfc0913262ce5855c908c35f9be456c72ac1",
+      "note": "Adds --cache-root-only, --single-rom and --inspect-cart, backed by cart.cache_root_only and cart.single_nds. The pak's wrapper pins the extraction cache to its own root, requires exactly one .nds entry, and sizes the cache before launch; the emulator also rejects unsafe entry paths. See PROVENANCE.md."
+    }
+  ],
   "toolchain": {
     "image": "ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:latest",
     "digest": "sha256:66aac16fb8b07e663c9b4d66970f272df195a6eba98dfad8286eabbaa617faf9",
@@ -43,8 +50,17 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "408ba324f554673e214f2ab2f1d044695ad32bfb2cc3b81dd248b961d1daba09",
-    "size_bytes": 1809648,
-    "note": "Recorded 2026-09-15 from two clean FORCE=1 builds with the SDL Wayland define that agreed byte for byte. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "d2cb62947dd65d231b5124ac2eef2d8f560a50ab6e937686965e53aa9ee8fb63",
+    "size_bytes": 1809664,
+    "note": "Recorded from clean FORCE=1 builds with the SDL Wayland define and the locked patch. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+  },
+  "notice": {
+    "file_name": "dsperate-notice",
+    "sha256": "c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160",
+    "size_bytes": 14224,
+    "source": "standalone/notice/notice.c",
+    "license": "MIT (this repository)",
+    "link": "libSDL2-2.0.so.0 and libSDL2_ttf-2.0.so.0, both device-provided; no bundled libraries or fonts",
+    "note": "The pak's own fullscreen message program. Built in the same pinned image and verified with the same allowlist. Recorded after two clean FORCE=1 builds agree."
   }
 }

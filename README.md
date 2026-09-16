@@ -23,8 +23,10 @@ clean clone with no sibling checkout.
 
 Experimental; no pak release has been published. The pinned binary has passed
 an MLP1 smoke test for Wayland dmabuf display, orientation, basic battery-save
-round-trip and termination. Full performance, archive and sleep qualification
-remain pending. The target is Leaf 0.12.0 with W3/W4 input and Menu support.
+round-trip and termination. The archive policy (pinned, bounded cache and
+visible refusals) is implemented and packaged. Sustained performance, save-fault
+injection and sleep/resume qualification remain pending. The target is Leaf
+0.12.0 with W3/W4 input and Menu support.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
 ## Build
@@ -57,7 +59,7 @@ DSperate in the Nintendo DS core picker.
 | Per-game settings | `$USERDATA_PATH/dsperate/games/<game key>/` |
 | Battery saves | `$SAVES_PATH/DSperate/<game key>/<ROM stem>.sav`, for the selected card |
 | Save states and screenshots | `$STATES_PATH/DSperate/<game key>/`, for the selected card |
-| ROM unpack cache fallback | `$USERDATA_PATH/dsperate/cache/<game key>/` |
+| ROM unpack cache | `$USERDATA_PATH/dsperate/cache/<game key>/`, always (never beside the ROM) |
 | Firmware settings sidecar | `$USERDATA_PATH/dsperate/games/<game key>/firmware.ovr` |
 | Log | `$LOGS_PATH/dsperate.log` |
 
@@ -70,6 +72,32 @@ progress.
 
 DSperate's saves are raw SRAM in its own format. They are not DraStic or Fun
 DraStic saves, and switching emulators switches saves.
+
+### Archives
+
+DSperate reads `.nds` and `.zip`. A deflated ROM in a `.zip` is unpacked once
+into the game's cache directory above; a stored one is read where it lies. The
+wrapper pins that directory, so nothing is ever unpacked beside your ROMs, and
+it bounds the whole cache before a launch:
+
+- 1 GiB total across every game.
+- 512 MiB for one game.
+- A free-space check, with a message if the card cannot hold the unpack.
+
+When the cache is full, the least recently used other game's unpack is removed
+to make room. The emulator still owns the per-directory cap.
+
+An archive that holds more than one `.nds` is refused rather than guessed at,
+and an encrypted, zip64 or otherwise unreadable archive is refused with the
+reason on screen. `.7z` is not supported: the launcher passes it through, so
+instead of a silent exit the pak shows a message telling you to extract the ROM
+or choose another emulator.
+
+### When a launch cannot start
+
+If a ROM cannot be opened, or a required file cannot be created, DSperate shows
+a fullscreen message and returns to Leaf instead of exiting silently. The same
+message names the reason, which is also written to `dsperate.log`.
 
 ### Earlier test installs
 
@@ -139,15 +167,16 @@ coordinates are demonstrated on hardware during qualification.
 ## Known limits
 
 - MLP1 only.
-- `.nds` and `.zip` content. DSperate does not read `.7z`, and the NDS system
-  passes archives through, so a `.7z` is not playable.
+- `.nds` and `.zip` content. `.7z` is not playable; it is refused with an
+  on-screen explanation rather than a log-only rejection.
 - Wayland dmabuf import and orientation passed the device smoke test.
   Sustained performance and sleep/resume remain unqualified.
-- ZIP cache placement and total bounds remain pending: upstream prefers a
-  cache beside the ROM and only uses the configured cache root as a fallback.
+- The ZIP cache is pinned under your userdata and bounded (1 GiB total, 512 MiB
+  per game). Upstream builds without these flags still prefer a cache beside
+  the ROM; this pak always passes them.
 - Required data paths containing INI comment delimiters (`#` or `;`) are
-  refused. ROM filenames may contain those characters. A config-write failure
-  stops launch and is recorded in the log; an on-screen error is still pending.
+  refused. ROM filenames may contain those characters. A config-write or
+  archive failure stops launch and is shown on screen as well as logged.
 - Existing global configs are preserved on updates. Versioned migration handles
   the defaults this package has changed since its first test builds; it does not
   guess at values you set yourself.

@@ -33,12 +33,27 @@ cp "$REPO_ROOT/pak/defaults/dsperate.ini" "$PAK/defaults/dsperate.ini"
 cp "$REPO_ROOT/pak/defaults/config.version" "$PAK/defaults/config.version"
 cat >"$PAK/bin/dsperate" <<'FAKE'
 #!/bin/sh
+for a in "$@"; do
+    if [ "$a" = "--inspect-cart" ]; then
+        printf '%s\n' "$@" >"${DS_FAKE_OUT}.inspect"
+        [ -n "${DS_FAKE_INSPECT:-}" ] && printf '%s\n' "$DS_FAKE_INSPECT"
+        [ -n "${DS_FAKE_INSPECT_ERR:-}" ] && printf '%s\n' "$DS_FAKE_INSPECT_ERR" >&2
+        exit "${DS_FAKE_INSPECT_RC:-0}"
+    fi
+done
 : >"$DS_FAKE_OUT"
 for a in "$@"; do printf '%s\n' "$a" >>"$DS_FAKE_OUT"; done
 printf '%s\n' "$XDG_CONFIG_HOME" >"$DS_FAKE_OUT.xdg"
 printf '%s\n' "$SDL_VIDEODRIVER" "${DS_ROTATE-unset}" >"$DS_FAKE_OUT.video"
 FAKE
-chmod 755 "$PAK/scripts/run.sh" "$PAK/bin/dsperate"
+cat >"$PAK/bin/dsperate-notice" <<'FAKE'
+#!/bin/sh
+[ -n "${DS_NOTICE_OUT:-}" ] || exit 0
+: >"$DS_NOTICE_OUT"
+for a in "$@"; do printf '%s\n' "$a" >>"$DS_NOTICE_OUT"; done
+exit 0
+FAKE
+chmod 755 "$PAK/scripts/run.sh" "$PAK/bin/dsperate" "$PAK/bin/dsperate-notice"
 
 mkdir -p "$SD/Roms/NDS/Some Folder" "$SD/Saves" "$SD/States" "$SD/BIOS/NDS" "$TMP/run"
 ROM="$SD/Roms/NDS/Some Folder/Game (USA).nds"
@@ -244,6 +259,92 @@ printf 'bogus\n' >"$STAMP"
 run_wrapper "$ROM"
 [ "$(cat "$STAMP" | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
     && pass || fail "invalid installed stamp was not repaired"
+
+# --- archive policy and visible errors ---------------------------------------
+# A launch that cannot proceed shows the notice instead of exiting silently.
+ZIP="$SD/Roms/NDS/Some Folder/Game (USA).zip"
+: >"$ZIP"
+NOTICE="$TMP/notice.txt"
+rm -f "$OUT" "$OUT.inspect"
+
+# A loose .nds never needs an archive inspection.
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$ROM" >/dev/null 2>&1
+[ ! -e "$OUT.inspect" ] && pass || fail "a loose .nds should not run --inspect-cart"
+
+# A .7z is refused on screen and returns to Leaf without launching.
+SEVEN="$SD/Roms/NDS/Some Folder/Game (USA).7z"
+: >"$SEVEN"
+rm -f "$OUT" "$OUT.inspect" "$NOTICE"
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$SEVEN" >/dev/null 2>&1
+rc=$?
+[ "$rc" -eq 0 ] && pass || fail ".7z should return to Leaf cleanly (rc=$rc)"
+[ ! -e "$OUT" ] && pass || fail ".7z should not launch the emulator"
+check_contains "$NOTICE" "not supported" ".7z notice title"
+check_contains "$NOTICE" ".7z" ".7z notice names the format"
+
+# Every case sets all three explicitly: an assignment before a function call
+# persists in this shell, so a failure mode would otherwise leak forward. They
+# must be exported for the wrapper's child to see a standalone assignment.
+export DS_FAKE_INSPECT DS_FAKE_INSPECT_RC DS_FAKE_INSPECT_ERR
+DS_FAKE_INSPECT="" DS_FAKE_INSPECT_RC=0 DS_FAKE_INSPECT_ERR=""
+
+# An archive the emulator cannot read is refused with its reason.
+rm -f "$OUT" "$OUT.inspect" "$NOTICE"
+DS_FAKE_INSPECT_RC=1
+DS_FAKE_INSPECT_ERR="dsperate: not a zip archive (no end-of-central-directory record)"
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
+[ ! -e "$OUT" ] && pass || fail "unreadable zip should not launch"
+check_contains "$NOTICE" "no end-of-central-directory" "unreadable zip reason shown"
+
+# More than one eligible .nds is a refusal, not a database guess.
+rm -f "$OUT" "$OUT.inspect" "$NOTICE"
+DS_FAKE_INSPECT_ERR="dsperate: the archive holds more than one .nds file"
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
+[ ! -e "$OUT" ] && pass || fail "multi-nds zip should not launch"
+check_contains "$NOTICE" "more than one" "multi-nds reason shown"
+
+# A deflated archive within budget launches with the pak cache policy pinned.
+rm -f "$OUT" "$OUT.inspect" "$NOTICE"
+DS_FAKE_INSPECT_RC=0 DS_FAKE_INSPECT_ERR=""
+DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=yes\nbytes=1048576\nentry=Game.nds')"
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
+check_contains "$OUT" "--cache-root-only" "zip launch pins the cache root"
+check_contains "$OUT" "--single-rom" "zip launch requires one ROM"
+check_contains "$OUT.inspect" "--inspect-cart" "zip launch inspects first"
+[ "$(tail -n 1 "$OUT")" = "$ZIP" ] && pass || fail "zip content path last"
+
+# A stored archive needs no unpacking, so nothing is refused or evicted.
+rm -f "$NOTICE"
+DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=no\nbytes=1048576\nentry=Game.nds')"
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
+[ ! -e "$NOTICE" ] && pass || fail "stored archive should not show a notice"
+
+# A ROM over the per-ROM limit is refused before anything is written.
+rm -f "$OUT" "$NOTICE"
+DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=yes\nbytes=600000000')"
+DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
+[ ! -e "$OUT" ] && pass || fail "oversized ROM should not launch"
+check_contains "$NOTICE" "too large" "per-ROM limit notice"
+
+# The total budget evicts the least recently used other game first.
+CACHEROOT="$SD/.userdata/mlp1/dsperate/cache"
+mkdir -p "$CACHEROOT/v2-oldest" "$CACHEROOT/v2-newer"
+dd if=/dev/zero of="$CACHEROOT/v2-oldest/blob" bs=1024 count=1024 2>/dev/null
+dd if=/dev/zero of="$CACHEROOT/v2-newer/blob" bs=1024 count=1024 2>/dev/null
+touch -t 202001010000 "$CACHEROOT/v2-oldest"
+touch -t 203001010000 "$CACHEROOT/v2-newer"
+rm -f "$OUT" "$NOTICE"
+DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=yes\nbytes=524288')"
+DS_TOTAL_CACHE_MB=2 DS_CACHE_MARGIN_MB=0 run_wrapper "$ZIP" >/dev/null 2>&1
+[ ! -d "$CACHEROOT/v2-oldest" ] && pass || fail "oldest cache not evicted first"
+[ -d "$CACHEROOT/v2-newer" ] && pass || fail "newer cache evicted anyway"
+
+# When nothing can be freed the launch is refused with a message.
+rm -rf "$CACHEROOT"/v2-*
+rm -f "$OUT" "$NOTICE"
+DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=yes\nbytes=524288')"
+DS_TOTAL_CACHE_MB=0 DS_CACHE_MARGIN_MB=0 DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
+check_contains "$NOTICE" "Not enough space" "budget refusal notice"
 
 echo "test-wrapper: $((checks - failures))/$checks checks passed"
 [ "$failures" -eq 0 ]
