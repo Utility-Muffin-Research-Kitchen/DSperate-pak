@@ -40,6 +40,11 @@
       "file": "0002-save-durability.patch",
       "sha256": "e6798d929fb686996b55a840e982df6a619f0408878780adc2d1f49116728a6e",
       "note": "Makes battery-save and save-state writes durable: flush, fsync, close and rename are all checked, so a full or read-only card cannot be reported as a successful save. Ignores a short save file instead of loading a half-filled one, and checks the firmware-override flush and close. See PROVENANCE.md."
+    },
+    {
+      "file": "0003-lid-resume-no-fabricated-close.patch",
+      "sha256": "d25a4566fb4dfa1bb53a83fb89bf91c5e66eef2bc618f4bbfd45b470f8b738ef",
+      "note": "Stops the host-resume lid pulse on a device with no lid switch. The old code fabricated a lid close/open cycle on every resume; games that blank their screens on lid-close and restore them only on an open they saw coming (Contra 4) stayed black. The pulse now only fires for a lid already believed closed. See PROVENANCE.md."
     }
   ],
   "toolchain": {
@@ -55,7 +60,7 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "6a4b4d8f1199bfec52fd9243bb2e90bbaa4cbcf4a797ad9792843b838be02028",
+    "sha256": "c50af518e7d4d5e637d0553d4303e463dba0bb3fcb8ef27352e0b5b57af8bc55",
     "size_bytes": 1813760,
     "note": "Recorded from clean FORCE=1 builds with the SDL Wayland define and the locked patch. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },

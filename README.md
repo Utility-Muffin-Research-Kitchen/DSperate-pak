@@ -25,10 +25,9 @@ Experimental; no pak release has been published. The pinned binary has passed
 an MLP1 smoke test for Wayland dmabuf display, orientation, basic battery-save
 round-trip and termination. The archive policy (pinned, bounded cache and
 visible refusals), versioned defaults migration and durable save writes are
-implemented and packaged; save-fault injection passed on hardware. Sustained
-performance remains pending, and one title stays black after suspend/resume
-while another recovers, so sleep/resume is not yet qualified. The target is Leaf
-0.12.0 with W3/W4 input and Menu support.
+implemented and packaged; save-fault injection and suspend/resume passed on
+hardware. Sustained performance, controls and local Pak Rat lifecycle remain
+pending. The target is Leaf 0.12.0 with W3/W4 input and Menu support.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
 ## Build
@@ -172,7 +171,8 @@ coordinates are demonstrated on hardware during qualification.
 - `.nds` and `.zip` content. `.7z` is not playable; it is refused with an
   on-screen explanation rather than a log-only rejection.
 - Wayland dmabuf import and orientation passed the device smoke test.
-  Sustained performance and sleep/resume remain unqualified.
+  Suspend/resume keeps emulation, audio, input and the screens on the titles
+  tested; sustained performance remains unqualified.
 - The ZIP cache is pinned under your userdata and bounded (1 GiB total, 512 MiB
   per game). Upstream builds without these flags still prefer a cache beside
   the ROM; this pak always passes them.

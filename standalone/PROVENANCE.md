@@ -11,7 +11,7 @@ Everything here is measured from the build, not from memory.
 | Tag | `v1.15.1` |
 | Commit | `4076a9ec0be9f649eb79fcd9e554d2cb48316d70` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
-| Patches | `patches/0001-pak-cache-and-archive-policy.patch` and `patches/0002-save-durability.patch` (sha256-locked; see below) |
+| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch` and `patches/0003-lid-resume-no-fabricated-close.patch` (sha256-locked; see below) |
 
 ## Patch
 
@@ -41,6 +41,15 @@ derived from the entry name in any case.
 Nothing here changes upstream's default behavior: every flag defaults off, so a
 build or launch that does not ask for the pak policy behaves exactly as the
 pinned commit does.
+
+`standalone/patches/0003-lid-resume-no-fabricated-close.patch` stops the
+host-resume lid pulse from fabricating a close on a device with no lid switch
+(the MLP1). Upstream pulses the emulated lid whenever the clocks show a suspend
+it did not see, which on these devices is every resume. A game that blanks its
+screens on lid-close and restores them only on an open it saw coming (Contra 4)
+then stays black; emulation, audio and input all keep running. The pulse now
+fires only for a lid already believed closed, so with no switch nothing happens
+and the screens survive a resume.
 
 `standalone/patches/0002-save-durability.patch` makes battery-save and
 save-state writes durable. Upstream writes to `<file>.tmp`, closes it without
@@ -98,7 +107,7 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patch | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `6a4b4d8f1199bfec52fd9243bb2e90bbaa4cbcf4a797ad9792843b838be02028` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| sha256 | `c50af518e7d4d5e637d0553d4303e463dba0bb3fcb8ef27352e0b5b57af8bc55` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
 | Size | 1,813,760 bytes | 14,224 bytes |
 | Reproduced | clean `FORCE=1` builds agreed byte for byte | clean `FORCE=1` builds agreed byte for byte |
 
