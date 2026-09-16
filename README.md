@@ -86,6 +86,16 @@ path under `games/<key>/xdg/dsperate/games/`. Remove any `pad.stick_deadzone = 0
 that was written by the old heuristic unless you confirmed calibration for the
 selected controller. Launch-bound paths are refreshed on the next launch.
 
+### Default updates
+
+Your global `dsperate.ini` is seeded once and then belongs to you, so a pak
+update cannot refresh it wholesale. Instead the package carries a defaults
+number (`defaults/config.version`), and a launch migrates a key only while it
+still holds the value an earlier package shipped. It never rewrites a value you
+changed, and it never touches unrelated lines. A fresh install and a repeat
+launch are no-ops. Your global `stick_deadzone`, custom bindings and layouts are
+preserved.
+
 ## BIOS and firmware
 
 DSperate boots games with a built-in FreeBIOS and a generated firmware, so no
@@ -138,8 +148,9 @@ coordinates are demonstrated on hardware during qualification.
 - Required data paths containing INI comment delimiters (`#` or `;`) are
   refused. ROM filenames may contain those characters. A config-write failure
   stops launch and is recorded in the log; an on-screen error is still pending.
-- Existing global configs are preserved on updates. Defaults-version migration
-  has not been implemented.
+- Existing global configs are preserved on updates. Versioned migration handles
+  the defaults this package has changed since its first test builds; it does not
+  guess at values you set yourself.
 - No bundled games, BIOS or firmware.
 
 ## Artwork

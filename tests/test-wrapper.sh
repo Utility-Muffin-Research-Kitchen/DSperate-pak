@@ -30,6 +30,7 @@ OUT="$TMP/args.txt"
 mkdir -p "$PAK/scripts" "$PAK/bin" "$PAK/defaults"
 cp "$WRAPPER" "$PAK/scripts/run.sh"
 cp "$REPO_ROOT/pak/defaults/dsperate.ini" "$PAK/defaults/dsperate.ini"
+cp "$REPO_ROOT/pak/defaults/config.version" "$PAK/defaults/config.version"
 cat >"$PAK/bin/dsperate" <<'FAKE'
 #!/bin/sh
 : >"$DS_FAKE_OUT"
@@ -172,6 +173,77 @@ SPECIAL="$SD/Roms/NDS/Space 'quote';hash#.nds"
 cp "$ROM" "$SPECIAL"
 run_wrapper "$SPECIAL"
 [ "$(tail -n 1 "$OUT")" = "$SPECIAL" ] && pass || fail "special filename did not round-trip"
+
+# --- defaults migration ------------------------------------------------------
+# The global config is seeded once and never refreshed, so an upgrade must
+# rewrite only keys that still hold an earlier shipped default. Customized
+# controls and layouts survive; the work is idempotent.
+GLOBAL_INI="$SD/.userdata/mlp1/dsperate/dsperate.ini"
+STAMP="$SD/.userdata/mlp1/dsperate/.umrk-defaults-version"
+SHIPPED_VERSION="$(tr -d '[:space:]' <"$REPO_ROOT/pak/defaults/config.version")"
+
+# A fresh install records the shipped revision.
+rm -f "$STAMP"
+run_wrapper "$ROM"
+[ "$(cat "$STAMP" 2>/dev/null | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
+    && pass || fail "fresh install records the defaults version"
+
+# Upgrading the revision before the MLP1 profile was fixed.
+cat >"$GLOBAL_INI" <<'INI'
+[emu]
+realtime = off
+
+[pad]
+stick_dpad = left
+stylus_axis = right
+a = y
+
+[video]
+layout = vertical
+INI
+rm -f "$STAMP"
+run_wrapper "$ROM"
+check_contains "$GLOBAL_INI" "stick_dpad = none" "old stick_dpad migrated"
+check_contains "$GLOBAL_INI" "stylus_axis = left" "old stylus_axis migrated"
+check_contains "$GLOBAL_INI" "stylus_button = +righttrigger" "missing stylus_button added"
+check_contains "$GLOBAL_INI" "stylus_button.alt = +lefttrigger" "missing stylus_button.alt added"
+check_contains "$GLOBAL_INI" "pause.alt = guide" "missing pause.alt added"
+check_contains "$GLOBAL_INI" "a = y" "custom pad binding preserved"
+check_contains "$GLOBAL_INI" "layout = vertical" "custom layout preserved"
+[ "$(cat "$STAMP" | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
+    && pass || fail "upgrade records the defaults version"
+
+# Repeated launch is a no-op and never duplicates a key.
+cp "$GLOBAL_INI" "$TMP/after-migration.ini"
+run_wrapper "$ROM"
+cmp -s "$GLOBAL_INI" "$TMP/after-migration.ini" && pass || fail "repeated launch rewrote the global config"
+[ "$(grep -c '^stylus_button = +righttrigger$' "$GLOBAL_INI")" = "1" ] \
+    && pass || fail "stylus_button duplicated"
+
+# A deliberate change away from a shipped default is kept.
+cat >"$GLOBAL_INI" <<'INI'
+[pad]
+stick_dpad = left
+stylus_axis = none
+INI
+rm -f "$STAMP"
+run_wrapper "$ROM"
+check_contains "$GLOBAL_INI" "stylus_axis = none" "custom stylus_axis preserved"
+check_contains "$GLOBAL_INI" "stick_dpad = none" "old stick_dpad still migrates beside a custom key"
+
+# An interrupted migration (keys written, version not recorded) is safe to
+# repeat: nothing duplicates and the stamp is then written.
+rm -f "$STAMP"
+run_wrapper "$ROM"
+[ "$(grep -c '^stylus_axis = none$' "$GLOBAL_INI")" = "1" ] \
+    && pass || fail "interrupted migration duplicated a key"
+[ -f "$STAMP" ] && pass || fail "interrupted migration did not record the version"
+
+# An invalid installed stamp is treated as an unversioned install.
+printf 'bogus\n' >"$STAMP"
+run_wrapper "$ROM"
+[ "$(cat "$STAMP" | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
+    && pass || fail "invalid installed stamp was not repaired"
 
 echo "test-wrapper: $((checks - failures))/$checks checks passed"
 [ "$failures" -eq 0 ]

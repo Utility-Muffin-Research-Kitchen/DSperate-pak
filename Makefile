@@ -55,6 +55,7 @@ package-mlp1: standalone
 	@cp "$(REPO_ROOT)/pak/res/icon.png" "$(PACKAGE)/res/icon.png"
 	@cp "$(REPO_ROOT)/pak/scripts/run.sh" "$(PACKAGE)/scripts/run.sh"
 	@cp "$(REPO_ROOT)/pak/defaults/dsperate.ini" "$(PACKAGE)/defaults/dsperate.ini"
+	@cp "$(REPO_ROOT)/pak/defaults/config.version" "$(PACKAGE)/defaults/config.version"
 	@cp "$(BUILD)/standalone/dsperate" "$(PACKAGE)/bin/dsperate"
 	@chmod 755 "$(PACKAGE)/scripts/run.sh" "$(PACKAGE)/bin/dsperate"
 	@cp "$(REPO_ROOT)/LICENSES/DSPERATE-LICENSE.txt" "$(PACKAGE)/LICENSE-DSPERATE.txt"

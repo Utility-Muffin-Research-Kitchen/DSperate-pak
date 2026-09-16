@@ -190,6 +190,99 @@ ini_set() {
     fi
 }
 
+# --- defaults migration ------------------------------------------------------
+# The global config is seeded once and then belongs to the user, so a new pak
+# cannot refresh it wholesale. Each shipped revision of the defaults carries a
+# number; a launch rewrites a key only while it still holds the value an earlier
+# revision shipped, and only adds a key that is absent. Customized controls,
+# layouts and unrelated lines are never touched. Re-running is safe: a key
+# already at its new value no longer matches its old one.
+DEFAULTS_VERSION_FILE="$ROOT_DIR/defaults/config.version"
+INSTALLED_VERSION_FILE="$STATE_ROOT/.umrk-defaults-version"
+
+# read_version FILE prints a plain integer, or fails for a missing/invalid file.
+read_version() {
+    [ -f "$1" ] || return 1
+    _v="$(tr -d '[:space:]' <"$1" 2>/dev/null)" || return 1
+    case "$_v" in ''|*[!0-9]*) return 1 ;; esac
+    printf '%s' "$_v"
+}
+
+# ini_get FILE SECTION KEY prints the key's value, or nothing when absent.
+ini_get() {
+    awk -v S="$2" -v K="$3" '
+        BEGIN { in_s = 0 }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            if (line ~ /^[ \t]*\[[^]]*\][ \t]*$/) {
+                hdr = line
+                sub(/^[ \t]*\[/, "", hdr)
+                sub(/\][ \t]*$/, "", hdr)
+                gsub(/^[ \t]+|[ \t]+$/, "", hdr)
+                in_s = (hdr == S)
+                next
+            }
+            if (!in_s) next
+            k = line
+            sub(/=.*/, "", k)
+            gsub(/^[ \t]+|[ \t]+$/, "", k)
+            if (k != K) next
+            v = line
+            sub(/^[^=]*=/, "", v)
+            gsub(/^[ \t]+|[ \t]+$/, "", v)
+            print v
+            exit
+        }
+    ' "$1" 2>/dev/null
+}
+
+# Add a key only when it is absent or empty; leave a present value alone.
+cfg_ensure_key() {
+    [ -n "$(ini_get "$1" "$2" "$3")" ] && return 0
+    ini_set "$1" "$2" "$3" "$4"
+}
+
+# Replace a key only while it still holds a previously shipped default.
+cfg_migrate_key() {
+    [ "$(ini_get "$1" "$2" "$3")" = "$4" ] || return 0
+    ini_set "$1" "$2" "$3" "$5"
+}
+
+record_defaults_version() {
+    _tmp="$INSTALLED_VERSION_FILE.tmp.$$"
+    printf '%s\n' "$1" >"$_tmp" 2>/dev/null && mv -f "$_tmp" "$INSTALLED_VERSION_FILE" 2>/dev/null \
+        || { rm -f "$_tmp" 2>/dev/null; log "could not record the installed defaults version"; return 1; }
+}
+
+if DEFAULTS_VERSION="$(read_version "$DEFAULTS_VERSION_FILE")"; then
+    if INSTALLED_VERSION="$(read_version "$INSTALLED_VERSION_FILE")"; then
+        :
+    else
+        [ -e "$INSTALLED_VERSION_FILE" ] && log "invalid installed defaults version; treating as 0"
+        INSTALLED_VERSION=0
+    fi
+    if [ "$INSTALLED_VERSION" -lt "$DEFAULTS_VERSION" ]; then
+        # Revision 2 added the Menu binding. Revision 3 moved the stylus to the
+        # one stick the MLP1 has and added its tap buttons.
+        if [ "$INSTALLED_VERSION" -lt 2 ]; then
+            cfg_ensure_key "$GLOBAL_INI" padhotkeys pause.alt guide || die "cannot migrate global config"
+        fi
+        if [ "$INSTALLED_VERSION" -lt 3 ]; then
+            cfg_migrate_key "$GLOBAL_INI" pad stick_dpad left none || die "cannot migrate global config"
+            cfg_migrate_key "$GLOBAL_INI" pad stylus_axis right left || die "cannot migrate global config"
+            cfg_ensure_key "$GLOBAL_INI" pad stick_dpad none || die "cannot migrate global config"
+            cfg_ensure_key "$GLOBAL_INI" pad stylus_axis left || die "cannot migrate global config"
+            cfg_ensure_key "$GLOBAL_INI" pad stylus_button +righttrigger || die "cannot migrate global config"
+            cfg_ensure_key "$GLOBAL_INI" pad stylus_button.alt +lefttrigger || die "cannot migrate global config"
+        fi
+        record_defaults_version "$DEFAULTS_VERSION" || die "cannot record the defaults version"
+        log "defaults migration: $INSTALLED_VERSION -> $DEFAULTS_VERSION"
+    fi
+else
+    log "missing or invalid defaults/config.version; skipping defaults migration"
+fi
+
 # Only launch-bound paths are pak-owned. Controls/deadzones stay user-owned.
 # A roster and a JSON file do not prove the selected pad was calibrated.
 ini_set "$GAME_INI" paths states "$STATES_DIR" || die "cannot bind save-state path"
