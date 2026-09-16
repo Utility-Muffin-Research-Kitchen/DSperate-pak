@@ -35,6 +35,11 @@
       "file": "0001-pak-cache-and-archive-policy.patch",
       "sha256": "8eead05553f414ef9d9729070225cfc0913262ce5855c908c35f9be456c72ac1",
       "note": "Adds --cache-root-only, --single-rom and --inspect-cart, backed by cart.cache_root_only and cart.single_nds. The pak's wrapper pins the extraction cache to its own root, requires exactly one .nds entry, and sizes the cache before launch; the emulator also rejects unsafe entry paths. See PROVENANCE.md."
+    },
+    {
+      "file": "0002-save-durability.patch",
+      "sha256": "e6798d929fb686996b55a840e982df6a619f0408878780adc2d1f49116728a6e",
+      "note": "Makes battery-save and save-state writes durable: flush, fsync, close and rename are all checked, so a full or read-only card cannot be reported as a successful save. Ignores a short save file instead of loading a half-filled one, and checks the firmware-override flush and close. See PROVENANCE.md."
     }
   ],
   "toolchain": {
@@ -50,8 +55,8 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "d2cb62947dd65d231b5124ac2eef2d8f560a50ab6e937686965e53aa9ee8fb63",
-    "size_bytes": 1809664,
+    "sha256": "6a4b4d8f1199bfec52fd9243bb2e90bbaa4cbcf4a797ad9792843b838be02028",
+    "size_bytes": 1813760,
     "note": "Recorded from clean FORCE=1 builds with the SDL Wayland define and the locked patch. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {

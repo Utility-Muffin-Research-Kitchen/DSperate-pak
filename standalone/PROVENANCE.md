@@ -11,7 +11,7 @@ Everything here is measured from the build, not from memory.
 | Tag | `v1.15.1` |
 | Commit | `4076a9ec0be9f649eb79fcd9e554d2cb48316d70` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
-| Patches | `patches/0001-pak-cache-and-archive-policy.patch` (sha256-locked; see below) |
+| Patches | `patches/0001-pak-cache-and-archive-policy.patch` and `patches/0002-save-durability.patch` (sha256-locked; see below) |
 
 ## Patch
 
@@ -41,6 +41,17 @@ derived from the entry name in any case.
 Nothing here changes upstream's default behavior: every flag defaults off, so a
 build or launch that does not ask for the pak policy behaves exactly as the
 pinned commit does.
+
+`standalone/patches/0002-save-durability.patch` makes battery-save and
+save-state writes durable. Upstream writes to `<file>.tmp`, closes it without
+checking the result, and renames. A buffered write on a full or read-only card
+can report success from `fwrite` and still never reach the disk, so a save
+reported as successful might not be there. The patch adds a checked helper
+(`write_file_durable`): `fwrite`, `fflush`, `fsync`, `fclose` and `rename` are
+all checked, the temporary is removed on failure, and the previous committed
+file is left untouched. It also ignores a save file that is not exactly the
+SRAM size instead of loading a half-filled one, and checks the firmware-override
+flush and close. A failed battery save stays dirty, so the next flush retries.
 
 ## Toolchain and flags
 
@@ -87,8 +98,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patch | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `d2cb62947dd65d231b5124ac2eef2d8f560a50ab6e937686965e53aa9ee8fb63` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 1,809,664 bytes | 14,224 bytes |
+| sha256 | `6a4b4d8f1199bfec52fd9243bb2e90bbaa4cbcf4a797ad9792843b838be02028` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 1,813,760 bytes | 14,224 bytes |
 | Reproduced | clean `FORCE=1` builds agreed byte for byte | clean `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch

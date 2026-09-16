@@ -1,0 +1,89 @@
+diff --git a/src/core/nds.cpp b/src/core/nds.cpp
+index 1b18ee4..2c8b265 100644
+--- a/src/core/nds.cpp
++++ b/src/core/nds.cpp
+@@ -267,7 +267,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
+       f.write(reinterpret_cast<const char*>(&page), 4);
+       f.write(reinterpret_cast<const char*>(firmware.data() + page * FW_PAGE), FW_PAGE);
+     }
++    f.flush();
+     if (!f) { err = "write failed"; return false; }
++    f.close();
++    if (f.fail()) { err = "close failed"; return false; }
+   }
+   // Rename over the old one, so an interrupted write cannot leave a truncated
+   // override that would boot the console with half of someone's settings.
+diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
+index 12fbd09..c2ddaa6 100644
+--- a/src/frontend/sdl/main.cpp
++++ b/src/frontend/sdl/main.cpp
+@@ -219,18 +219,45 @@ void load_save(NDS& nds, const std::string& path) {
+   std::vector<u8>& sram = nds.cart->sram();
+   const size_t n = std::fread(sram.data(), 1, sram.size(), f);
+   std::fclose(f);
++  // A save is exactly the SRAM size. A short one is a truncated or corrupt
++  // file; loading what is there would hand the game a half-filled save, so
++  // leave the fresh (zeroed) SRAM alone and say so.
++  if (n != sram.size()) {
++    std::fprintf(stderr, "save: %s is %zu of %zu bytes; ignoring it\n", path.c_str(), n, sram.size());
++    return;
++  }
+   VLOG("save: loaded %zu bytes from %s\n", n, path.c_str());
+ }
+ 
+-void write_save(NDS& nds, const std::string& path) {
+-  if (!nds.cart || nds.cart->sram().empty()) return;
+-  // Write-then-rename so a power cut mid-write leaves the previous file.
++// Write `size` bytes to `path` durably: to a temporary beside it, flushed and
++// synchronized to the disk, then renamed over the target. False with the
++// reason in `err` when any step fails, leaving the previous file in place.
++//
++// Every step is checked because a short fwrite does not catch a buffered write
++// that only fails when the kernel flushes it: on a full or read-only card
++// fwrite can report success and the data still never reaches the disk. A
++// save reported as successful must actually be on the card.
++bool write_file_durable(const std::string& path, const void* data, size_t size, std::string& err) {
+   const std::string tmp = path + ".tmp";
+   FILE* f = std::fopen(tmp.c_str(), "wb");
+-  if (!f) { std::fprintf(stderr, "save: cannot write %s\n", tmp.c_str()); return; }
+-  const bool ok = std::fwrite(nds.cart->sram().data(), 1, nds.cart->sram().size(), f) == nds.cart->sram().size();
+-  std::fclose(f);
+-  if (!ok || std::rename(tmp.c_str(), path.c_str()) != 0) { std::fprintf(stderr, "save: cannot write %s\n", path.c_str()); return; }
++  if (!f) { err = "cannot open " + tmp; return false; }
++  bool ok = std::fwrite(data, 1, size, f) == size;
++  if (ok) ok = std::fflush(f) == 0 && fsync(fileno(f)) == 0;
++  if (std::fclose(f) != 0) ok = false;
++  if (!ok) { err = "cannot write " + tmp; std::remove(tmp.c_str()); return false; }
++  if (std::rename(tmp.c_str(), path.c_str()) != 0) { err = "cannot replace " + path; std::remove(tmp.c_str()); return false; }
++  return true;
++}
++
++void write_save(NDS& nds, const std::string& path) {
++  if (!nds.cart || nds.cart->sram().empty()) return;
++  std::string err;
++  if (!write_file_durable(path, nds.cart->sram().data(), nds.cart->sram().size(), err)) {
++    // Still dirty: the next flush tries again, and the previous committed file
++    // is untouched.
++    std::fprintf(stderr, "save: %s\n", err.c_str());
++    return;
++  }
+   nds.cart->clear_sram_dirty();
+ }
+ 
+@@ -437,12 +464,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
+   if (!nds.save_state(w, err)) { std::fprintf(stderr, "state: cannot save: %s\n", err.c_str()); return false; }
+   write_layout_chunk(w, layout);
+   write_cheevos_chunk(w);
+-  const std::string tmp = path + ".tmp";
+-  FILE* f = std::fopen(tmp.c_str(), "wb");
+-  if (!f) { std::fprintf(stderr, "state: cannot write %s\n", tmp.c_str()); return false; }
+-  const bool ok = std::fwrite(w.data().data(), 1, w.data().size(), f) == w.data().size();
+-  std::fclose(f);
+-  if (!ok || std::rename(tmp.c_str(), path.c_str()) != 0) { std::fprintf(stderr, "state: cannot write %s\n", path.c_str()); return false; }
++  if (!write_file_durable(path, w.data().data(), w.data().size(), err)) {
++    std::fprintf(stderr, "state: %s\n", err.c_str());
++    return false;
++  }
+   std::fprintf(stderr, "state: saved %s (%zu KB)\n", path.c_str(), w.data().size() >> 10);
+   return true;
+ }
