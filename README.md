@@ -24,8 +24,10 @@ clean clone with no sibling checkout.
 Experimental; no pak release has been published. The pinned binary has passed
 an MLP1 smoke test for Wayland dmabuf display, orientation, basic battery-save
 round-trip and termination. The archive policy (pinned, bounded cache and
-visible refusals) is implemented and packaged. Sustained performance, save-fault
-injection and sleep/resume qualification remain pending. The target is Leaf
+visible refusals), versioned defaults migration and durable save writes are
+implemented and packaged; save-fault injection passed on hardware. Sustained
+performance remains pending, and one title stays black after suspend/resume
+while another recovers, so sleep/resume is not yet qualified. The target is Leaf
 0.12.0 with W3/W4 input and Menu support.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
