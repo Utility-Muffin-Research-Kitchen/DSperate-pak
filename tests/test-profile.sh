@@ -40,16 +40,19 @@ grep -q '^stylus_axis = left$' "$INI" && pass || fail "stylus_axis should be lef
 grep -q '^stylus_button = +righttrigger$' "$INI" && pass || fail "stylus_button should be +righttrigger"
 grep -q '^stick_dpad = none$' "$INI" && pass || fail "stick_dpad should be none (the stick is the pen)"
 
+# The MLP1 pad's SDL mapping names its face buttons by printed label, so the
+# stock position-named defaults swap X and Y. The profile binds them by name.
+grep -q '^x = x$' "$INI" && pass || fail "pad.x should bind the X-labelled button"
+grep -q '^y = y$' "$INI" && pass || fail "pad.y should bind the Y-labelled button"
+
 # The Menu contract this profile assumes.
 grep -q '^modifier = back$' "$INI" && pass || fail "modifier should be back"
 grep -q '^pause.alt = guide$' "$INI" && pass || fail "pause.alt should be guide"
 grep -q '"supports_menu": true' "$MANIFEST" && pass || fail "pak.json should declare supports_menu: true"
 
-# The wrapper must disable DSperate's deadzone when Jawaka's calibrated virtual
-# pad already normalized the stick, and only then.
-WRAPPER="$REPO_ROOT/pak/scripts/run.sh"
-grep -q 'loong-gamepad-calibration.json' "$WRAPPER" && pass || fail "wrapper should look for the calibration profile"
-grep -q 'ini_set "\$GAME_INI" pad stick_deadzone' "$WRAPPER" && pass || fail "wrapper should set the stick deadzone per launch"
+# The pak keeps a raw default and leaves calibration tuning to user settings.
+grep -q '^stick_deadzone = 12000$' "$INI" && pass || fail "raw deadzone default"
+grep -q '^pause = mod+start$' "$INI" && pass || fail "pause fallback should be Select+Start"
 
 echo "test-profile: $((checks - failures))/$checks checks passed"
 [ "$failures" -eq 0 ]

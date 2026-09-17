@@ -1,11 +1,11 @@
 {
   "schema": 1,
-  "note": "Everything needed to reproduce the shipped DSperate binary. A fresh clone of this repository plus Docker is the whole toolchain: no sibling checkout, no locally built image, no opaque downloaded binary. DSperate itself is unpatched. `make standalone` refuses a source archive or artifact whose sha256 does not match this file.",
+  "note": "Everything needed to reproduce the shipped DSperate binary. A fresh clone of this repository plus Docker is the whole toolchain: no sibling checkout, no locally built image, no opaque downloaded binary. DSperate is built from the pinned commit with the pak's patches in `patches/`, applied in order; each is locked by sha256 and the build refuses a mismatch. `make standalone` refuses a source archive or artifact whose sha256 does not match this file.",
   "core": {
     "id": "dsperate",
     "source_url": "https://github.com/beebono/DSperate.git",
-    "source_tag": "v1.15.1",
-    "source_commit": "4076a9ec0be9f649eb79fcd9e554d2cb48316d70",
+    "source_tag": "v2.0.0",
+    "source_commit": "86bef065f93c55fc59c5ab5e93e06c812fcd7bf7",
     "license": "GPL-3.0-or-later",
     "license_path_in_source": "LICENSE"
   },
@@ -15,9 +15,9 @@
     "wayland_define": "-DSDL_VIDEO_DRIVER_WAYLAND=1",
     "wayland_note": "The toolchain sysroot's SDL2 2.28.5 is built without its Wayland driver, so its SDL_config.h leaves SDL_VIDEO_DRIVER_WAYLAND undefined and SDL_syswm.h hides SDL_SysWMinfo's Wayland fields. Defining the macro for this build exposes those fields without changing the toolchain, and is what lets the intended dmabuf tier compile. The public union reserves the fields' space regardless, and the binary links the device's Wayland-capable SDL at runtime. The build fails if the probe or display_wl.cpp does not confirm the real tier.",
     "language": "C++17, upstream CMake/Ninja build",
-    "source_date_epoch": 1789088321,
+    "source_date_epoch": 1789612242,
     "source_date_note": "The pinned commit's committer timestamp.",
-    "cheevos_version": "1.15.1",
+    "cheevos_version": "2.0.0",
     "cheevos_version_note": "Passed explicitly because a shallow checkout has no tags for upstream's `git describe` fallback.",
     "cmake": [
       "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -27,9 +27,39 @@
       "-DDSPERATE_HEADLESS=OFF",
       "-DDSPERATE_CHEEVOS=ON",
       "-DDSPERATE_WAYLAND=ON",
-      "-DDSPERATE_CHEEVOS_VERSION=1.15.1"
+      "-DDSPERATE_CHEEVOS_VERSION=2.0.0",
+      "-DDSPERATE_PGO=use",
+      "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ]
   },
+  "pgo": {
+    "dir": "standalone/pgo/aarch64",
+    "sha256": "205a6b1c8edf87d3d86af0ad75ed6ec5c534366327bdcd9377df705fe1dbf569",
+    "files": 96,
+    "fingerprint": "e5053f2d1f5b27e9ed70bda94b614845979aa599",
+    "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
+    "source_commit": "86bef065f93c55fc59c5ab5e93e06c812fcd7bf7",
+    "date": "2026-09-17T20:15Z",
+    "scenes": "mlbis sm64 etody dbori meteos gsdd nsmb",
+    "note": "Trained with this pak's own toolchain (Buildroot GCC 12.3.0) and flags so the fingerprint matches the release build; upstream's committed profile is for a different compiler and is refused. The headless frontend is the training build (the SDL frontend, rcheevos and the reference kernels are never trained). `st` is absent because the recorded save state is for another ROM revision. Verify with `-DDSPERATE_PGO_STRICT=ON`: 0 unexpected objects without a profile and 0 coverage mismatches."
+  },
+  "patches": [
+    {
+      "file": "0001-pak-cache-and-archive-policy.patch",
+      "sha256": "6605c5827c1b3c433817b504b1514e45e8e22c8c015aa4d4770dca11168a2d10",
+      "note": "Adds --cache-root-only, --single-rom and --inspect-cart, backed by cart.cache_root_only and cart.single_nds. The pak's wrapper pins the extraction cache to its own root, requires exactly one .nds entry, and sizes the cache before launch; the emulator also rejects unsafe entry paths. See PROVENANCE.md."
+    },
+    {
+      "file": "0002-save-durability.patch",
+      "sha256": "714c6d0494dee3e5ffa3a769acf26da628fbe3b19f1364b04d11ce4d35bc929a",
+      "note": "Keeps checked flush, fsync, close and rename for battery-save and save-state writes, plus checked firmware-override flush and close. Retains v2.0.0 upstream save loading, chip detection and mismatch backups instead of the old fixed-size load guard. See PROVENANCE.md."
+    },
+    {
+      "file": "0003-lid-resume-no-fabricated-close.patch",
+      "sha256": "d25a4566fb4dfa1bb53a83fb89bf91c5e66eef2bc618f4bbfd45b470f8b738ef",
+      "note": "Stops the host-resume lid pulse on a device with no lid switch. The old code fabricated a lid close/open cycle on every resume; games that blank their screens on lid-close and restore them only on an open they saw coming (Contra 4) stayed black. The pulse now only fires for a lid already believed closed. See PROVENANCE.md."
+    }
+  ],
   "toolchain": {
     "image": "ghcr.io/utility-muffin-research-kitchen/mlp1-toolchain:latest",
     "digest": "sha256:66aac16fb8b07e663c9b4d66970f272df195a6eba98dfad8286eabbaa617faf9",
@@ -43,8 +73,17 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "408ba324f554673e214f2ab2f1d044695ad32bfb2cc3b81dd248b961d1daba09",
-    "size_bytes": 1809648,
-    "note": "Recorded 2026-09-15 from two clean FORCE=1 builds with the SDL Wayland define that agreed byte for byte. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "a63ee1db30cf37de0b802217bedbd1cdd664855af350242d7235d0a347651646",
+    "size_bytes": 4378136,
+    "note": "Recorded after two clean FORCE=1 builds with the SDL Wayland define, all locked patches and the locked PGO profile agree. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+  },
+  "notice": {
+    "file_name": "dsperate-notice",
+    "sha256": "c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160",
+    "size_bytes": 14224,
+    "source": "standalone/notice/notice.c",
+    "license": "MIT (this repository)",
+    "link": "libSDL2-2.0.so.0 and libSDL2_ttf-2.0.so.0, both device-provided; no bundled libraries or fonts",
+    "note": "The pak's own fullscreen message program. Built in the same pinned image and verified with the same allowlist. Recorded after two clean FORCE=1 builds agree."
   }
 }

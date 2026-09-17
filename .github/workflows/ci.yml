@@ -34,6 +34,9 @@ jobs:
       - name: Validate pak.json against CONTENT-1
         run: make validate CONTRACT_DIR="$PWD/.contract"
 
+      - name: Check wrapper and MLP1 profile
+        run: make test-wrapper test-profile
+
       - name: Refuse a launch.sh
         run: |
           # This repository is a PURE content pak. A launch.sh would quietly
@@ -57,16 +60,11 @@ jobs:
 
   build:
     runs-on: ubuntu-latest
-    # The build is long. Keep it off the PR path but never let main drift.
-    if: github.event_name != 'pull_request'
     steps:
       - uses: actions/checkout@v4
 
       - name: Build the pinned DSperate binary
         run: make standalone
-
-      - name: Check the launch wrapper
-        run: make test-wrapper
 
       - name: Package and hash
         run: make dist-pakrat

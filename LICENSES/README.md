@@ -6,8 +6,10 @@ redistributing the built pak.
 | What | Licence | Where |
 | --- | --- | --- |
 | The DSperate binary (`bin/dsperate`) | **GPL-3.0-or-later** | `DSPERATE-LICENSE.txt`; in the package also `LICENSE-DSPERATE.txt` |
-| Third-party code inside DSperate (miniz, rcheevos) | See their notices in the DSperate source | The corresponding-source archive |
+| Third-party code inside DSperate (FreeBIOS, miniz, rcheevos, ENet, libslirp) | See the upstream component notices | `LICENSE-THIRD-PARTY.txt` in the package; complete notices in the corresponding-source archive |
+| Generated DSi system fonts | Noto Sans: OFL 1.1; WenQuanYi Micro Hei: GPL-3+ with font exception | `LICENSE-THIRD-PARTY.txt`; `src/core/io/dsi_font/` in corresponding source |
 | This repository's build system, manifest, wrapper, scripts | MIT | `REPO-LICENSE.txt` |
+| Pak branding artwork | User-supplied ChatGPT artwork; separate provenance | `pak/art/SOURCE.md` |
 
 DSperate is a clean-room emulator; its own `LICENSE` and `src/core/bios/LICENSE.freebios`
 are reproduced by the source this repository builds. The binary links the
@@ -30,7 +32,8 @@ This repository discharges that by construction rather than by promise:
   toolchain image and refuses to package an artifact whose sha256 does not
   match its lock.
 - `make dist-source` produces an archive to publish **alongside** the pak: the
-  DSperate tree at the pinned commit plus the lock.
+  patched DSperate tree, the locked PGO profiles, notice-program source, build
+  scripts, toolchain configuration, wrapper, metadata and licence notices.
 
 If you fork this repository and change a pin, republish the source for your pin:
 the obligation follows the binary you distributed, not the one upstream

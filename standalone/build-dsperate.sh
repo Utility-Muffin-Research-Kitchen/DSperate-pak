@@ -45,6 +45,26 @@ print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
 PY
 }
 
+# Deterministic digest of the whole PGO profile directory: every file's name and
+# bytes in sorted order, so the lock pins the exact profile the artifact was
+# built from and a drift is caught before the build, not by a drifting hash.
+profile_sha256() {
+  python3 - "$1" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+h = hashlib.sha256()
+for name in sorted(os.listdir(root)):
+    path = os.path.join(root, name)
+    if not os.path.isfile(path):
+        continue
+    h.update(name.encode("utf-8"))
+    h.update(b"\0")
+    with open(path, "rb") as f:
+        h.update(f.read())
+print(h.hexdigest())
+PY
+}
+
 SOURCE_URL="$(lock core source_url)"
 SOURCE_COMMIT="$(lock core source_commit)"
 IMAGE="$(lock toolchain image)"
@@ -52,9 +72,13 @@ DIGEST="$(lock toolchain digest)"
 CROSS="$(lock toolchain cross_prefix)"
 ARTIFACT="$(lock artifact file_name)"
 EXPECTED_SHA="$(lock artifact sha256)"
+NOTICE_ARTIFACT="$(lock notice file_name)"
+EXPECTED_NOTICE_SHA="$(lock notice sha256)"
 SOURCE_EPOCH="$(lock build source_date_epoch)"
 GLIBC_CEILING="$(lock device glibc_ceiling)"
 CHEEVOS_VERSION="$(lock build cheevos_version)"
+PGO_DIR_REL="$(lock pgo dir)"
+PGO_SHA="$(lock pgo sha256)"
 
 # A tag can move; a digest cannot.
 IMAGE_REF="${IMAGE%%:*}@${DIGEST}"
@@ -77,9 +101,35 @@ else
   [ "$(git -C "$SRC_DIR" rev-parse HEAD)" = "$SOURCE_COMMIT" ] \
     || die "checked out $(git -C "$SRC_DIR" rev-parse HEAD), lock says $SOURCE_COMMIT"
 
-  # DSperate ships unpatched. Tracked files must match the commit exactly.
-  git -C "$SRC_DIR" diff --quiet HEAD \
-    || die "the DSperate tree has local changes; this lane builds it unmodified"
+  # Reset to the pinned commit and apply this pak's patches. A cached clone can
+  # drift (a previous run's patch, a hand edit), so every build starts from the
+  # exact pinned tree and applies the same locked patches in order.
+  git -C "$SRC_DIR" reset -q --hard "$SOURCE_COMMIT"
+  git -C "$SRC_DIR" clean -qfd
+
+  PATCH_ROWS="$(python3 - "$LOCK" <<'PY'
+import json, sys
+for p in json.load(open(sys.argv[1], encoding="utf-8")).get("patches", []):
+    print(f"{p['file']} {p['sha256']}")
+PY
+)"
+  if [ -n "$PATCH_ROWS" ]; then
+    while IFS=' ' read -r pfile psha; do
+      [ -n "$pfile" ] || continue
+      patch_path="$REPO_ROOT/standalone/patches/$pfile"
+      [ -f "$patch_path" ] || die "locked patch is missing: $pfile"
+      actual="$(sha256 "$patch_path")"
+      [ "$actual" = "$psha" ] \
+        || die "patch $pfile sha256 mismatch
+  file:   $actual
+  locked: $psha"
+      say "applying $pfile"
+      git -C "$SRC_DIR" apply --whitespace=nowarn "$patch_path" \
+        || die "could not apply $pfile to $SOURCE_COMMIT"
+    done <<EOF
+$PATCH_ROWS
+EOF
+  fi
 
   if [ "${FORCE:-0}" = "1" ]; then
     say "forcing a clean rebuild"
@@ -88,12 +138,25 @@ else
     mkdir -p "$WORK_DIR" "$OUT_DIR"
   fi
 
-  say "building in $IMAGE_REF"
+  # The PGO profile is a build input like a patch: verify it against the lock
+  # before a byte of the binary exists, so a probe-refresh or a stray edit is
+  # caught here rather than as an artifact hash mismatch at the end.
+  PGO_ABS="$REPO_ROOT/$PGO_DIR_REL"
+  [ -d "$PGO_ABS" ] || die "PGO profile directory is missing: $PGO_DIR_REL"
+  [ -f "$PGO_ABS/MANIFEST" ] || die "PGO profile MANIFEST is missing: $PGO_DIR_REL"
+  actual_pgo="$(profile_sha256 "$PGO_ABS")"
+  [ "$actual_pgo" = "$PGO_SHA" ] || die "PGO profile sha256 mismatch
+  dir:    $PGO_DIR_REL
+  actual: $actual_pgo
+  locked: $PGO_SHA"
+
+  say "building in $IMAGE_REF with the locked PGO profile ($PGO_DIR_REL)"
   docker run --rm \
     -e CROSS="$CROSS" \
     -e SOURCE_DATE_EPOCH="$SOURCE_EPOCH" \
     -e GLIBC_CEILING="$GLIBC_CEILING" \
     -e ARTIFACT="$ARTIFACT" \
+    -e NOTICE_ARTIFACT="$NOTICE_ARTIFACT" \
     -e CHEEVOS_VERSION="$CHEEVOS_VERSION" \
     -v "$SRC_DIR":/src \
     -v "$WORK_DIR":/work \
@@ -105,24 +168,34 @@ else
 fi
 
 [ -f "$OUT_DIR/$ARTIFACT" ] || die "build produced no $ARTIFACT"
+[ -f "$OUT_DIR/$NOTICE_ARTIFACT" ] || die "build produced no $NOTICE_ARTIFACT"
 
 ACTUAL_SHA="$(sha256 "$OUT_DIR/$ARTIFACT")"
 SIZE_BYTES="$(python3 -c 'import os,sys;print(os.path.getsize(sys.argv[1]))' "$OUT_DIR/$ARTIFACT")"
-say "artifact sha256 $ACTUAL_SHA ($SIZE_BYTES bytes)"
+NOTICE_SHA="$(sha256 "$OUT_DIR/$NOTICE_ARTIFACT")"
+NOTICE_SIZE="$(python3 -c 'import os,sys;print(os.path.getsize(sys.argv[1]))' "$OUT_DIR/$NOTICE_ARTIFACT")"
+say "binary sha256 $ACTUAL_SHA ($SIZE_BYTES bytes)"
+say "notice sha256 $NOTICE_SHA ($NOTICE_SIZE bytes)"
 
-if [ "$EXPECTED_SHA" = "PENDING-FIRST-VERIFIED-BUILD" ]; then
+if [ "$EXPECTED_SHA" = "PENDING-FIRST-VERIFIED-BUILD" ] ||
+   [ "$EXPECTED_NOTICE_SHA" = "PENDING-FIRST-VERIFIED-BUILD" ]; then
   echo
-  say "upstream.lock.json has no recorded artifact hash yet."
-  say "Reproduce this build with FORCE=1, confirm the same hash, then record it"
-  say "under artifact.sha256 and artifact.size_bytes."
+  say "upstream.lock.json has no recorded hash yet for one of the artifacts."
+  say "Reproduce this build with FORCE=1, confirm the same hashes, then record"
+  say "them under artifact.* and notice.*."
   exit 0
 fi
 
 [ "$ACTUAL_SHA" = "$EXPECTED_SHA" ] \
-  || die "artifact sha256 mismatch
+  || die "binary sha256 mismatch
   built:  $ACTUAL_SHA
   locked: $EXPECTED_SHA
-A mismatch means a source or the toolchain moved. Do not update the lock
-without knowing which."
+A mismatch means a source, a patch or the toolchain moved. Do not update the
+lock without knowing which."
+
+[ "$NOTICE_SHA" = "$EXPECTED_NOTICE_SHA" ] \
+  || die "notice sha256 mismatch
+  built:  $NOTICE_SHA
+  locked: $EXPECTED_NOTICE_SHA"
 
 say "matches the lock"
