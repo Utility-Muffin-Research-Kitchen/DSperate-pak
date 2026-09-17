@@ -48,6 +48,11 @@ make dist-source    # GPL corresponding source for the shipped binary
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
 
+Publish the corresponding-source archive beside the pak ZIP. It includes the
+patched upstream tree in `dsperate-src/`, plus the build scripts, locked PGO
+profiles, notice-program source and package files. `make dist-source` checks
+that the archive contains the locked build inputs before accepting it.
+
 ## Install
 
 Install the pak on the primary card at `Apps/mlp1/DSperate.pak`. It is an

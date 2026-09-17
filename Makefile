@@ -84,10 +84,15 @@ dist-source:
 	@mkdir -p "$(DIST)"
 	@[ -d "$(BUILD)/dsperate-src/.git" ] || { \
 		echo "no source clone yet; run 'make standalone' first" >&2; exit 1; }
-	@tar -czf "$(DIST)/dsperate-corresponding-source.tar.gz" \
+	@COPYFILE_DISABLE=1 tar -czf "$(DIST)/dsperate-corresponding-source.tar.gz" \
 		-C "$(BUILD)" \
 		--exclude='dsperate-src/.git' \
-		dsperate-src
+		dsperate-src \
+		-C "$(REPO_ROOT)" \
+		standalone LICENSES Makefile README.md pak pakrat.json \
+		scripts/validate-pak.py tests
+	@python3 "$(REPO_ROOT)/tests/test-source-archive.py" \
+		"$(DIST)/dsperate-corresponding-source.tar.gz"
 	@cp "$(REPO_ROOT)/standalone/upstream.lock.json" "$(DIST)/upstream.lock.json"
 	@python3 -c "import hashlib,sys;p=sys.argv[1];print('sha256', hashlib.sha256(open(p,'rb').read()).hexdigest())" \
 		"$(DIST)/dsperate-corresponding-source.tar.gz"

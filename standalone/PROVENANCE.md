@@ -236,7 +236,9 @@ Run the archive check against a Linux executable with
 container, prefix the executable with the SDK's `lib/ld-linux-aarch64.so.1`
 and `--library-path` naming its `lib` and `usr/lib` directories.
 
-The existing hardware evidence is for the patched v1.15.1 build. Recheck the
-v2.0.0 artifact on MLP1 for launch, controls, saves, sleep and sustained pacing
-before publication. DSiWare, NAND/SD persistence and networking are not qualified
-Leaf features in this update. The pak version remains the unreleased `0.1.0`.
+The patched v2.0.0 build passed MLP1 launch, controls, save faults, sleep and
+sustained pacing checks on 2026-09-17. The locked PGO build was subsequently
+installed on the same device; both core pickers and the visible `.7z` refusal
+were verified there. DSiWare, NAND/SD persistence and networking are not
+qualified Leaf features in this update. The pak version is the unreleased
+`2.0.0`.
