@@ -223,6 +223,8 @@ check_contains "$GLOBAL_INI" "stylus_axis = left" "old stylus_axis migrated"
 check_contains "$GLOBAL_INI" "stylus_button = +righttrigger" "missing stylus_button added"
 check_contains "$GLOBAL_INI" "stylus_button.alt = +lefttrigger" "missing stylus_button.alt added"
 check_contains "$GLOBAL_INI" "pause.alt = guide" "missing pause.alt added"
+check_contains "$GLOBAL_INI" "x = x" "missing pad.x bind added"
+check_contains "$GLOBAL_INI" "y = y" "missing pad.y bind added"
 check_contains "$GLOBAL_INI" "a = y" "custom pad binding preserved"
 check_contains "$GLOBAL_INI" "layout = vertical" "custom layout preserved"
 [ "$(cat "$STAMP" | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
@@ -240,11 +242,14 @@ cat >"$GLOBAL_INI" <<'INI'
 [pad]
 stick_dpad = left
 stylus_axis = none
+x = q
 INI
 rm -f "$STAMP"
 run_wrapper "$ROM"
 check_contains "$GLOBAL_INI" "stylus_axis = none" "custom stylus_axis preserved"
 check_contains "$GLOBAL_INI" "stick_dpad = none" "old stick_dpad still migrates beside a custom key"
+check_contains "$GLOBAL_INI" "x = q" "custom pad.x preserved"
+check_contains "$GLOBAL_INI" "y = y" "pad.y added beside a custom pad.x"
 
 # An interrupted migration (keys written, version not recorded) is safe to
 # repeat: nothing duplicates and the stamp is then written.

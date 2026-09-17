@@ -40,6 +40,11 @@ grep -q '^stylus_axis = left$' "$INI" && pass || fail "stylus_axis should be lef
 grep -q '^stylus_button = +righttrigger$' "$INI" && pass || fail "stylus_button should be +righttrigger"
 grep -q '^stick_dpad = none$' "$INI" && pass || fail "stick_dpad should be none (the stick is the pen)"
 
+# The MLP1 pad's SDL mapping names its face buttons by printed label, so the
+# stock position-named defaults swap X and Y. The profile binds them by name.
+grep -q '^x = x$' "$INI" && pass || fail "pad.x should bind the X-labelled button"
+grep -q '^y = y$' "$INI" && pass || fail "pad.y should bind the Y-labelled button"
+
 # The Menu contract this profile assumes.
 grep -q '^modifier = back$' "$INI" && pass || fail "modifier should be back"
 grep -q '^pause.alt = guide$' "$INI" && pass || fail "pause.alt should be guide"
