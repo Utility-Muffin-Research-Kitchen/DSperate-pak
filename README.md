@@ -24,10 +24,12 @@ clean clone with no sibling checkout.
 Experimental; no pak release has been published. The current source pin is
 **DSperate v2.0.0**, with three reviewed pak patches. Two clean builds reproduce
 the binary, and wrapper, profile, archive CLI and focused upstream tests pass.
-The earlier MLP1 display, save-fault and suspend/resume checks used v1.15.1;
-the new binary needs fresh hardware qualification. Sustained performance,
-controls and local Pak Rat lifecycle remain pending. The target is Leaf 0.12.0
-with W3/W4 input and Menu support. The first pak version remains `0.1.0`.
+The v2.0.0 binary also passed an MLP1 hardware re-qualification on 2026-09-17:
+Jawaka path-core launch and orientation, Menu and controls, old-state loading,
+save and save-state faults, running and paused suspend/resume, and sustained
+speed and audio. Local Pak Rat lifecycle and picker persistence remain pending.
+The target is Leaf 0.12.0 with W3/W4 input and Menu support. The pak version
+tracks the upstream emulator, so it is now `2.0.0`.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
 ## Build
@@ -178,9 +180,10 @@ coordinates are demonstrated on hardware during qualification.
 - MLP1 only.
 - `.nds` and `.zip` content. `.7z` is not playable; it is refused with an
   on-screen explanation rather than a log-only rejection.
-- The v1.15.1 test build passed Wayland dmabuf, orientation and suspend/resume
-  checks on the titles tested. The v2.0.0 binary needs those hardware checks
-  repeated; sustained performance remains unqualified.
+- The v2.0.0 binary passed Wayland dmabuf, orientation, controls, save and
+  state faults, suspend/resume and sustained performance on the titles tested.
+  Local Pak Rat install and uninstall qualification is pending; the runbook and
+  adb harness are in `scripts/device-lifecycle.sh`.
 - The ZIP cache is pinned under your userdata and bounded (1 GiB total, 512 MiB
   per game). Upstream builds without these flags still prefer a cache beside
   the ROM; this pak always passes them.
