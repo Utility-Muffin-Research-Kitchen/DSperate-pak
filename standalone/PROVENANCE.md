@@ -224,7 +224,7 @@ corresponding source retains all file-level notices.
 
 Checks passed on 2026-09-17:
 
-- 78 wrapper checks and 12 MLP1 profile checks.
+- 82 wrapper checks and 14 MLP1 profile checks.
 - Seven real-executable archive CLI checks (raw, stored, deflated, ambiguous,
   opt-in selection, unsafe path and malformed ZIP).
 - Eight upstream AArch64 tests in the pinned container: `scheduler`,
@@ -238,7 +238,10 @@ and `--library-path` naming its `lib` and `usr/lib` directories.
 
 The patched v2.0.0 build passed MLP1 launch, controls, save faults, sleep and
 sustained pacing checks on 2026-09-17. The locked PGO build was subsequently
-installed on the same device; both core pickers and the visible `.7z` refusal
-were verified there. DSiWare, NAND/SD persistence and networking are not
+installed on the same device; both core pickers, selection persistence after a
+device reboot, the visible `.7z` refusal and stick-driven stylus input were
+verified there. Local Pak Rat install/reinstall/uninstall passed and preserved
+all 35 tested settings, save and state files byte for byte.
+DSiWare, NAND/SD persistence and networking are not
 qualified Leaf features in this update. The pak version is the unreleased
 `2.0.0`.

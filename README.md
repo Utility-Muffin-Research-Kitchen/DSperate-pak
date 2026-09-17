@@ -27,7 +27,10 @@ the binary, and wrapper, profile, archive CLI and focused upstream tests pass.
 The v2.0.0 binary also passed an MLP1 hardware re-qualification on 2026-09-17:
 Jawaka path-core launch and orientation, Menu and controls, old-state loading,
 save and save-state faults, running and paused suspend/resume, and sustained
-speed and audio. Local Pak Rat lifecycle and picker persistence remain pending.
+speed and audio. The locked PGO build passed local Pak Rat install, reinstall
+and uninstall checks, both core pickers, selection persistence across a device
+reboot, the `.7z` warning and stick-driven stylus/tap checks. Uninstall preserved
+all 35 tested settings, save and state files byte for byte.
 The target is Leaf 0.12.0 with W3/W4 input and Menu support. The pak version
 tracks the upstream emulator, so it is now `2.0.0`.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
@@ -187,8 +190,8 @@ coordinates are demonstrated on hardware during qualification.
   on-screen explanation rather than a log-only rejection.
 - The v2.0.0 binary passed Wayland dmabuf, orientation, controls, save and
   state faults, suspend/resume and sustained performance on the titles tested.
-  Local Pak Rat install and uninstall qualification is pending; the runbook is
-  in the plan and the adb harness is Leaf's `scripts/adb-dsperate-lifecycle.sh`.
+  Local Pak Rat lifecycle, picker persistence and stylus input checks also pass.
+  These results cover the tested titles and input paths, not every DS game.
 - The ZIP cache is pinned under your userdata and bounded (1 GiB total, 512 MiB
   per game). Upstream builds without these flags still prefer a cache beside
   the ROM; this pak always passes them.
