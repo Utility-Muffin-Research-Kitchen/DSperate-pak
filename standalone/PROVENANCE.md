@@ -243,5 +243,4 @@ device reboot, the visible `.7z` refusal and stick-driven stylus input were
 verified there. Local Pak Rat install/reinstall/uninstall passed and preserved
 all 35 tested settings, save and state files byte for byte.
 DSiWare, NAND/SD persistence and networking are not
-qualified Leaf features in this update. The pak version is the unreleased
-`2.0.0`.
+qualified Leaf features in this update. The pak version is `2.0.0`.
