@@ -21,7 +21,8 @@ clean clone with no sibling checkout.
 
 ## Status
 
-Experimental; no pak release has been published. The current source pin is
+[DSperate 2.0.0](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.0.0)
+is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The source pin is
 **DSperate v2.0.0**, with three reviewed pak patches. Two clean builds reproduce
 the binary, and wrapper, profile, archive CLI and focused upstream tests pass.
 The v2.0.0 binary also passed an MLP1 hardware re-qualification on 2026-09-17:
