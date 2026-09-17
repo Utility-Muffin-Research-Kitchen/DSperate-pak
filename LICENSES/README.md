@@ -6,7 +6,8 @@ redistributing the built pak.
 | What | Licence | Where |
 | --- | --- | --- |
 | The DSperate binary (`bin/dsperate`) | **GPL-3.0-or-later** | `DSPERATE-LICENSE.txt`; in the package also `LICENSE-DSPERATE.txt` |
-| Third-party code inside DSperate (miniz, rcheevos) | See their notices in the DSperate source | The corresponding-source archive |
+| Third-party code inside DSperate (FreeBIOS, miniz, rcheevos, ENet, libslirp) | See the upstream component notices | `LICENSE-THIRD-PARTY.txt` in the package; complete notices in the corresponding-source archive |
+| Generated DSi system fonts | Noto Sans: OFL 1.1; WenQuanYi Micro Hei: GPL-3+ with font exception | `LICENSE-THIRD-PARTY.txt`; `src/core/io/dsi_font/` in corresponding source |
 | This repository's build system, manifest, wrapper, scripts | MIT | `REPO-LICENSE.txt` |
 | Pak branding artwork | User-supplied ChatGPT artwork; separate provenance | `pak/art/SOURCE.md` |
 

@@ -61,6 +61,13 @@ package-mlp1: standalone
 	@chmod 755 "$(PACKAGE)/scripts/run.sh" "$(PACKAGE)/bin/dsperate" "$(PACKAGE)/bin/dsperate-notice"
 	@cp "$(REPO_ROOT)/LICENSES/DSPERATE-LICENSE.txt" "$(PACKAGE)/LICENSE-DSPERATE.txt"
 	@cp "$(REPO_ROOT)/LICENSES/REPO-LICENSE.txt" "$(PACKAGE)/LICENSE-REPO.txt"
+	@for notice in src/core/bios/LICENSE.freebios src/core/cart/miniz/LICENSE \
+		src/cheevos/rcheevos/LICENSE src/net/enet/LICENSE src/net/slirp/LICENSE \
+		src/net/slirp/COPYRIGHT src/core/io/dsi_font/LICENSE-NotoSans-OFL-1.1.txt \
+		src/core/io/dsi_font/LICENSE-WenQuanYi-MicroHei.txt; do \
+		printf '\n=== %s ===\n\n' "$$notice"; \
+		cat "$(BUILD)/dsperate-src/$$notice" || exit 1; \
+	 done > "$(PACKAGE)/LICENSE-THIRD-PARTY.txt"
 	@echo "packaged $(PACKAGE)"
 	@echo "note: no launch.sh -- this is a pure content pak and is not listed in Apps."
 

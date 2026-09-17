@@ -4,8 +4,8 @@
   "core": {
     "id": "dsperate",
     "source_url": "https://github.com/beebono/DSperate.git",
-    "source_tag": "v1.15.1",
-    "source_commit": "4076a9ec0be9f649eb79fcd9e554d2cb48316d70",
+    "source_tag": "v2.0.0",
+    "source_commit": "86bef065f93c55fc59c5ab5e93e06c812fcd7bf7",
     "license": "GPL-3.0-or-later",
     "license_path_in_source": "LICENSE"
   },
@@ -15,9 +15,9 @@
     "wayland_define": "-DSDL_VIDEO_DRIVER_WAYLAND=1",
     "wayland_note": "The toolchain sysroot's SDL2 2.28.5 is built without its Wayland driver, so its SDL_config.h leaves SDL_VIDEO_DRIVER_WAYLAND undefined and SDL_syswm.h hides SDL_SysWMinfo's Wayland fields. Defining the macro for this build exposes those fields without changing the toolchain, and is what lets the intended dmabuf tier compile. The public union reserves the fields' space regardless, and the binary links the device's Wayland-capable SDL at runtime. The build fails if the probe or display_wl.cpp does not confirm the real tier.",
     "language": "C++17, upstream CMake/Ninja build",
-    "source_date_epoch": 1789088321,
+    "source_date_epoch": 1789612242,
     "source_date_note": "The pinned commit's committer timestamp.",
-    "cheevos_version": "1.15.1",
+    "cheevos_version": "2.0.0",
     "cheevos_version_note": "Passed explicitly because a shallow checkout has no tags for upstream's `git describe` fallback.",
     "cmake": [
       "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
@@ -27,19 +27,19 @@
       "-DDSPERATE_HEADLESS=OFF",
       "-DDSPERATE_CHEEVOS=ON",
       "-DDSPERATE_WAYLAND=ON",
-      "-DDSPERATE_CHEEVOS_VERSION=1.15.1"
+      "-DDSPERATE_CHEEVOS_VERSION=2.0.0"
     ]
   },
   "patches": [
     {
       "file": "0001-pak-cache-and-archive-policy.patch",
-      "sha256": "8eead05553f414ef9d9729070225cfc0913262ce5855c908c35f9be456c72ac1",
+      "sha256": "6605c5827c1b3c433817b504b1514e45e8e22c8c015aa4d4770dca11168a2d10",
       "note": "Adds --cache-root-only, --single-rom and --inspect-cart, backed by cart.cache_root_only and cart.single_nds. The pak's wrapper pins the extraction cache to its own root, requires exactly one .nds entry, and sizes the cache before launch; the emulator also rejects unsafe entry paths. See PROVENANCE.md."
     },
     {
       "file": "0002-save-durability.patch",
-      "sha256": "e6798d929fb686996b55a840e982df6a619f0408878780adc2d1f49116728a6e",
-      "note": "Makes battery-save and save-state writes durable: flush, fsync, close and rename are all checked, so a full or read-only card cannot be reported as a successful save. Ignores a short save file instead of loading a half-filled one, and checks the firmware-override flush and close. See PROVENANCE.md."
+      "sha256": "714c6d0494dee3e5ffa3a769acf26da628fbe3b19f1364b04d11ce4d35bc929a",
+      "note": "Keeps checked flush, fsync, close and rename for battery-save and save-state writes, plus checked firmware-override flush and close. Retains v2.0.0 upstream save loading, chip detection and mismatch backups instead of the old fixed-size load guard. See PROVENANCE.md."
     },
     {
       "file": "0003-lid-resume-no-fabricated-close.patch",
@@ -60,9 +60,9 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "c50af518e7d4d5e637d0553d4303e463dba0bb3fcb8ef27352e0b5b57af8bc55",
-    "size_bytes": 1813760,
-    "note": "Recorded from clean FORCE=1 builds with the SDL Wayland define and the locked patch. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "dd02e8b8bbaffa58ef894668f74a441197556482be96cac47f23710d65de9375",
+    "size_bytes": 4599304,
+    "note": "Recorded after two clean FORCE=1 builds with the SDL Wayland define and all locked patches agree. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
     "file_name": "dsperate-notice",

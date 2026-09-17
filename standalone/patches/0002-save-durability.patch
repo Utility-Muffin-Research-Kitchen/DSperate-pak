@@ -1,8 +1,8 @@
 diff --git a/src/core/nds.cpp b/src/core/nds.cpp
-index 1b18ee4..2c8b265 100644
+index 3f23f6a..24e2043 100644
 --- a/src/core/nds.cpp
 +++ b/src/core/nds.cpp
-@@ -267,7 +267,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
+@@ -280,7 +280,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
        f.write(reinterpret_cast<const char*>(&page), 4);
        f.write(reinterpret_cast<const char*>(firmware.data() + page * FW_PAGE), FW_PAGE);
      }
@@ -14,21 +14,11 @@ index 1b18ee4..2c8b265 100644
    // Rename over the old one, so an interrupted write cannot leave a truncated
    // override that would boot the console with half of someone's settings.
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 12fbd09..c2ddaa6 100644
+index 0377099..48a1d25 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -219,18 +219,45 @@ void load_save(NDS& nds, const std::string& path) {
-   std::vector<u8>& sram = nds.cart->sram();
-   const size_t n = std::fread(sram.data(), 1, sram.size(), f);
-   std::fclose(f);
-+  // A save is exactly the SRAM size. A short one is a truncated or corrupt
-+  // file; loading what is there would hand the game a half-filled save, so
-+  // leave the fresh (zeroed) SRAM alone and say so.
-+  if (n != sram.size()) {
-+    std::fprintf(stderr, "save: %s is %zu of %zu bytes; ignoring it\n", path.c_str(), n, sram.size());
-+    return;
-+  }
-   VLOG("save: loaded %zu bytes from %s\n", n, path.c_str());
+@@ -305,15 +305,35 @@ void load_save(NDS& nds, const std::string& path) {
+   }
  }
  
 -void write_save(NDS& nds, const std::string& path) {
@@ -70,7 +60,7 @@ index 12fbd09..c2ddaa6 100644
    nds.cart->clear_sram_dirty();
  }
  
-@@ -437,12 +464,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
+@@ -548,12 +568,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
    if (!nds.save_state(w, err)) { std::fprintf(stderr, "state: cannot save: %s\n", err.c_str()); return false; }
    write_layout_chunk(w, layout);
    write_cheevos_chunk(w);

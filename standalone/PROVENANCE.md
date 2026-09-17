@@ -8,16 +8,27 @@ Everything here is measured from the build, not from memory.
 | | |
 | --- | --- |
 | Upstream | `https://github.com/beebono/DSperate.git` |
-| Tag | `v1.15.1` |
-| Commit | `4076a9ec0be9f649eb79fcd9e554d2cb48316d70` |
+| Tag | `v2.0.0` |
+| Commit | `86bef065f93c55fc59c5ab5e93e06c812fcd7bf7` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
 | Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch` and `patches/0003-lid-resume-no-fabricated-close.patch` (sha256-locked; see below) |
 
-## Patch
+## Patches
 
-`standalone/patches/0001-pak-cache-and-archive-policy.patch` is the pak's only
-change to upstream. It is locked by sha256 in `upstream.lock.json`; the build
-applies it to the pinned commit and refuses a patch whose hash differs.
+The three patches are locked by sha256 in `upstream.lock.json`; the build
+applies them in order and refuses a patch whose hash differs.
+
+Reviewed against [upstream v2.0.0](https://github.com/beebono/DSperate/releases/tag/v2.0.0)
+on 2026-09-17:
+
+| Patch | Decision |
+| --- | --- |
+| 0001 archive/cache policy | Keep. Upstream's ZIP parser and cache selection are unchanged. Rebase frontend context around the expanded CLI; retain every new upstream CLI setting. |
+| 0002 save durability | Keep checked writes and firmware flush/close. Drop the old fixed-size loading check: upstream now detects unlisted save chips, understands DeSmuME footers and backs up size mismatches. |
+| 0003 lid/resume | Keep byte for byte. Upstream's lid implementation is unchanged and still fabricates a close on a device with no switch. |
+
+`standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
+archive policy.
 
 It adds three opt-in command-line flags and the two settings behind them:
 
@@ -38,9 +49,8 @@ component. Upstream already refuses encryption, zip64 and unknown compression;
 this closes the remaining path-shaped case, and the extraction target was never
 derived from the entry name in any case.
 
-Nothing here changes upstream's default behavior: every flag defaults off, so a
-build or launch that does not ask for the pak policy behaves exactly as the
-pinned commit does.
+The cache-root and single-ROM policies default off. Unsafe archive entry
+names are rejected regardless of those flags.
 
 `standalone/patches/0003-lid-resume-no-fabricated-close.patch` stops the
 host-resume lid pulse from fabricating a close on a device with no lid switch
@@ -58,9 +68,20 @@ can report success from `fwrite` and still never reach the disk, so a save
 reported as successful might not be there. The patch adds a checked helper
 (`write_file_durable`): `fwrite`, `fflush`, `fsync`, `fclose` and `rename` are
 all checked, the temporary is removed on failure, and the previous committed
-file is left untouched. It also ignores a save file that is not exactly the
-SRAM size instead of loading a half-filled one, and checks the firmware-override
-flush and close. A failed battery save stays dirty, so the next flush retries.
+file is left untouched. It also checks the firmware-override flush and close.
+A failed battery save stays dirty, so the next flush retries.
+
+Save loading now follows upstream v2.0.0. For a known chip, upstream loads the
+portion that fits and saves the original mismatched file as `.bak`; for an
+unknown chip, a supported save size selects the chip. This is different from
+refusing every short save. The removed guard read into live SRAM before checking
+the count, so it did not actually undo partial reads even in the old patch.
+The checked-write helper covers DS battery saves and save-state files, not
+upstream's new DSi NAND/SD persistence or mismatch-backup writes.
+
+Upstream writes state format 3 and accepts DS format 2 from v1.15.1. This is a
+source-reviewed compatibility promise, not a device migration test. Back up your
+states before updating: v1.15.1 cannot read states newly written by v2.0.0.
 
 ## Toolchain and flags
 
@@ -78,12 +99,13 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_TESTS` | `OFF` | no test binaries ship |
 | `DSPERATE_HEADLESS` | `OFF` | the measurement harness does not ship |
 | `DSPERATE_CHEEVOS` | `ON` | upstream default; libcurl is `dlopen`ed at runtime, not linked |
+| `DSPERATE_NET` | `ON` | upstream default; vendored ENet and libslirp are linked statically; network sessions default off |
 | `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
-| `DSPERATE_CHEEVOS_VERSION` | `1.15.1` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
+| `DSPERATE_CHEEVOS_VERSION` | `2.0.0` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
-(`1789088321`). PGO is off (upstream default), so no training data is needed.
+(`1789612242`). PGO is off (upstream default), so no training data is needed.
 
 ## Linkage
 
@@ -105,10 +127,10 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 
 | | `bin/dsperate` | `bin/dsperate-notice` |
 | --- | --- | --- |
-| Source | upstream at the pinned commit, plus the locked patch | `standalone/notice/notice.c` (this repository) |
+| Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `c50af518e7d4d5e637d0553d4303e463dba0bb3fcb8ef27352e0b5b57af8bc55` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 1,813,760 bytes | 14,224 bytes |
+| sha256 | `dd02e8b8bbaffa58ef894668f74a441197556482be96cac47f23710d65de9375` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,599,304 bytes | 14,224 bytes |
 | Reproduced | clean `FORCE=1` builds agreed byte for byte | clean `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
@@ -137,7 +159,7 @@ Independent ABI check (2026-09-16), compiled for AArch64 with the pinned SDK:
 `sizeof(SDL_SysWMinfo) = 72`, `offsetof(info) = 8`, Wayland member size 64,
 `offsetof(info.wl.surface) = 16`, and `offsetof(info.wl.xdg_toplevel) = 48`.
 The public structure size and union offset agree with and without the define.
-A separate full build with the define reproduced the locked artifact hash.
+A separate full build with the define reproduced the then-pinned v1.15.1 artifact hash.
 This check applies to these pinned SDL 2.28.5 headers and the qualified device
 SDL; changing the SDK or runtime SDL requires checking the ABI again.
 
@@ -149,3 +171,31 @@ does not confirm the real tier, so a silently stubbed build cannot ship.
 
 The dmabuf allocation, Weston import, orientation and performance are qualified
 on the device separately; the SDL window-surface route remains the fallback.
+
+## v2.0.0 verification
+
+Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
+runtime library allowlist are unchanged. The larger emulator contains the new
+DSi core, generated system fonts and vendored networking code. The package
+carries FreeBIOS, miniz, rcheevos, ENet, libslirp and both font notices in
+`LICENSE-THIRD-PARTY.txt`, copied from the exact pinned source; the complete
+corresponding source retains all file-level notices.
+
+Checks passed on 2026-09-17:
+
+- 78 wrapper checks and 12 MLP1 profile checks.
+- Seven real-executable archive CLI checks (raw, stored, deflated, ambiguous,
+  opt-in selection, unsafe path and malformed ZIP).
+- Eight upstream AArch64 tests in the pinned container: `scheduler`,
+  `cart_save`, `fastmem`, `spu`, `config`, `input`, `firmware` and `zip`.
+- AArch64, stripping, GLIBC ceiling, library allowlist and real Wayland backend.
+
+Run the archive check against a Linux executable with
+`python3 tests/test-archive-cli.py /path/to/dsperate`. In the pinned AArch64
+container, prefix the executable with the SDK's `lib/ld-linux-aarch64.so.1`
+and `--library-path` naming its `lib` and `usr/lib` directories.
+
+The existing hardware evidence is for the patched v1.15.1 build. Recheck the
+v2.0.0 artifact on MLP1 for launch, controls, saves, sleep and sustained pacing
+before publication. DSiWare, NAND/SD persistence and networking are not qualified
+Leaf features in this update. The pak version remains the unreleased `0.1.0`.

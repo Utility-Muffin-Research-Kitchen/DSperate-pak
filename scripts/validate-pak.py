@@ -139,9 +139,10 @@ def main() -> int:
             if not (pak_dir / rel).is_file():
                 print(f"FAIL package: missing {rel}")
                 return 1
-        if not (pak_dir / "LICENSE-DSPERATE.txt").is_file():
-            print("FAIL package: missing LICENSE-DSPERATE.txt")
-            return 1
+        for rel in ("LICENSE-DSPERATE.txt", "LICENSE-THIRD-PARTY.txt"):
+            if not (pak_dir / rel).is_file():
+                print(f"FAIL package: missing {rel}")
+                return 1
         print("ok   package: wrapper, binaries, defaults and licence notice")
 
     # Branding assets are intentionally not NDS system art declarations.

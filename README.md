@@ -21,13 +21,13 @@ clean clone with no sibling checkout.
 
 ## Status
 
-Experimental; no pak release has been published. The pinned binary has passed
-an MLP1 smoke test for Wayland dmabuf display, orientation, basic battery-save
-round-trip and termination. The archive policy (pinned, bounded cache and
-visible refusals), versioned defaults migration and durable save writes are
-implemented and packaged; save-fault injection and suspend/resume passed on
-hardware. Sustained performance, controls and local Pak Rat lifecycle remain
-pending. The target is Leaf 0.12.0 with W3/W4 input and Menu support.
+Experimental; no pak release has been published. The current source pin is
+**DSperate v2.0.0**, with three reviewed pak patches. Two clean builds reproduce
+the binary, and wrapper, profile, archive CLI and focused upstream tests pass.
+The earlier MLP1 display, save-fault and suspend/resume checks used v1.15.1;
+the new binary needs fresh hardware qualification. Sustained performance,
+controls and local Pak Rat lifecycle remain pending. The target is Leaf 0.12.0
+with W3/W4 input and Menu support. The first pak version remains `0.1.0`.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
 ## Build
@@ -100,6 +100,14 @@ If a ROM cannot be opened, or a required file cannot be created, DSperate shows
 a fullscreen message and returns to Leaf instead of exiting silently. The same
 message names the reason, which is also written to `dsperate.log`.
 
+### Updating from the v1.15.1 test build
+
+Back up your save states before updating. Upstream v2.0.0 supports reading the
+older DS state format, but v1.15.1 cannot load states newly written by v2.0.0.
+Battery-save paths and per-game identities stay the same. The pak still targets
+DS games; upstream's experimental DSiWare and network features have not been
+qualified for Leaf.
+
 ### Earlier test installs
 
 The initial test wrapper used shared basename saves, shared game-code states
@@ -170,9 +178,9 @@ coordinates are demonstrated on hardware during qualification.
 - MLP1 only.
 - `.nds` and `.zip` content. `.7z` is not playable; it is refused with an
   on-screen explanation rather than a log-only rejection.
-- Wayland dmabuf import and orientation passed the device smoke test.
-  Suspend/resume keeps emulation, audio, input and the screens on the titles
-  tested; sustained performance remains unqualified.
+- The v1.15.1 test build passed Wayland dmabuf, orientation and suspend/resume
+  checks on the titles tested. The v2.0.0 binary needs those hardware checks
+  repeated; sustained performance remains unqualified.
 - The ZIP cache is pinned under your userdata and bounded (1 GiB total, 512 MiB
   per game). Upstream builds without these flags still prefer a cache beside
   the ROM; this pak always passes them.

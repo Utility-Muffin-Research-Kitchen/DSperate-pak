@@ -139,10 +139,10 @@ index 0eda46c..b0b69c3 100644
    // evicts the least recently launched images to make room (0: no limit).
    // The image being opened is never evicted.
 diff --git a/src/core/nds.cpp b/src/core/nds.cpp
-index 6cb8020..1b18ee4 100644
+index 323248f..3f23f6a 100644
 --- a/src/core/nds.cpp
 +++ b/src/core/nds.cpp
-@@ -326,6 +326,8 @@ bool NDS::load_rom(const std::string& path) {
+@@ -339,6 +339,8 @@ bool NDS::load_rom(const std::string& path) {
    if (zipped) {
      cart::ZipOpen how;
      how.fallback_dir = rom_cache_dir;
@@ -152,10 +152,10 @@ index 6cb8020..1b18ee4 100644
      how.progress = rom_progress; how.progress_user = rom_progress_user;
      how.cancel = rom_cancel;
 diff --git a/src/core/nds.h b/src/core/nds.h
-index daff09d..aa14eba 100644
+index e8fbec7..92b3acf 100644
 --- a/src/core/nds.h
 +++ b/src/core/nds.h
-@@ -62,6 +62,8 @@ struct NDS {
+@@ -92,6 +92,8 @@ struct NDS {
    // callback for the extraction. Both optional; set before load_rom.
    std::string rom_cache_dir;
    u64 rom_cache_max_bytes = 0;                 // 0: no limit
@@ -165,18 +165,18 @@ index daff09d..aa14eba 100644
    void* rom_progress_user = nullptr;
    std::atomic<bool>* rom_cancel = nullptr;     // set from another thread to abandon the extraction
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 29ea903..12fbd09 100644
+index 67432af..0377099 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -49,6 +49,7 @@
- #include <cstdlib>
+@@ -63,6 +63,7 @@
  #include <cstring>
  #include <fstream>
+ #include <functional>
 +#include <memory>
  #include <thread>
  #include <atomic>
  #include <ctime>
-@@ -156,7 +157,10 @@ const char* kUsage =
+@@ -224,7 +225,10 @@ const char* kUsage =
      "  --save F        battery save to start from, instead of <rom>.sav\n"
      "                  (a --replay never writes the save back, so a scene repeats)\n"
      "  --clear-cache   delete every unpacked zipped game (the .dsperate directories beside the\n"
@@ -188,7 +188,7 @@ index 29ea903..12fbd09 100644
  
  std::string rom_dir_of(const std::string& rom) {
    const size_t slash = rom.find_last_of('/');
-@@ -906,6 +910,27 @@ const char* extra_default(const char* key, bool pad, const ds::sdl::Config& cfg)
+@@ -1079,6 +1083,27 @@ const char* extra_default(const char* key, bool pad, const ds::sdl::Config& cfg)
    return ds::sdl::Input::mod_default(pad);
  }
  
@@ -216,15 +216,15 @@ index 29ea903..12fbd09 100644
  } // namespace
  
  int main(int argc, char** argv) {
-@@ -913,6 +938,7 @@ int main(int argc, char** argv) {
+@@ -1086,6 +1111,7 @@ int main(int argc, char** argv) {
    const char* config_arg = nullptr;
    long frame_limit = 0;
    const char *record = nullptr, *replay = nullptr, *save_arg = nullptr, *load_state = nullptr;
 +  const char* inspect_cart_arg = nullptr;
    bool clear_cache = false;
    bool rtc_host = false;              // --rtc-host: a real clock even under a replay (the firmware menu needs one)
-   long stats_from = 0;   // frames run but left out of the timing statistics
-@@ -960,6 +986,12 @@ int main(int argc, char** argv) {
+   const char* lan_host = nullptr; const char* lan_join = nullptr; const char* lan_name = "DSperate"; bool netplay = false;
+@@ -1170,6 +1196,12 @@ int main(int argc, char** argv) {
      else if (arg("--replay")) replay = argv[++i];
      else if (arg("--save")) save_arg = argv[++i];
      else if (arg("--load-state")) load_state = argv[++i];
@@ -237,18 +237,18 @@ index 29ea903..12fbd09 100644
      else if (arg("--autosave-png")) cli.set("emu.autosave_png", argv[++i]);
  #if DSPERATE_CHEEVOS
      // Turning RetroAchievements on for one run, without editing the config.
-@@ -1019,8 +1051,9 @@ int main(int argc, char** argv) {
-   if (!cfg.load(global_ini) && config_arg) { std::fprintf(stderr, "cannot read %s\n", config_arg); return 2; }
+@@ -1266,8 +1298,9 @@ int main(int argc, char** argv) {
+   }
    auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
                                                "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.disp", "video.fbdev", "video.vsync", "audio.enabled", "audio.volume",
--                                              "audio.mic", "emu.jit", "emu.quantum", "emu.timing_oc", "emu.cpu_oc", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
-+                                              "audio.mic", "emu.jit", "emu.quantum", "emu.timing_oc", "emu.cpu_oc", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
+-                                              "audio.mic", "emu.jit", "emu.quantum", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.timing_oc", "emu.gx_worker", "emu.cpu_tuning", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
++                                              "audio.mic", "emu.jit", "emu.quantum", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.timing_oc", "emu.gx_worker", "emu.cpu_tuning", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
    apply_cli();
 +  if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
-   const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7"), fw = cfg.str("paths.firmware");
- 
-   // No ROM boots the firmware's own menu. A file called BootMenu.nds selects
-@@ -1289,6 +1322,8 @@ sdl_ready:
+   const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
+   // The DSi's own firmware, for a session that is a DSi from the start, unless
+   // --firmware named one; a path that names no file counts as unset.
+@@ -1741,6 +1774,8 @@ sdl_ready:
    // much the cache may hold, and whether it survives the session
    // (cart/zip_cache.h; config [paths] cache, [cart] cache_mb, cache).
    nds.rom_cache_dir = cfg.str("paths.cache", "");
