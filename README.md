@@ -182,8 +182,8 @@ coordinates are demonstrated on hardware during qualification.
   on-screen explanation rather than a log-only rejection.
 - The v2.0.0 binary passed Wayland dmabuf, orientation, controls, save and
   state faults, suspend/resume and sustained performance on the titles tested.
-  Local Pak Rat install and uninstall qualification is pending; the runbook and
-  adb harness are in `scripts/device-lifecycle.sh`.
+  Local Pak Rat install and uninstall qualification is pending; the runbook is
+  in the plan and the adb harness is Leaf's `scripts/adb-dsperate-lifecycle.sh`.
 - The ZIP cache is pinned under your userdata and bounded (1 GiB total, 512 MiB
   per game). Upstream builds without these flags still prefer a cache beside
   the ROM; this pak always passes them.
