@@ -27,8 +27,21 @@
       "-DDSPERATE_HEADLESS=OFF",
       "-DDSPERATE_CHEEVOS=ON",
       "-DDSPERATE_WAYLAND=ON",
-      "-DDSPERATE_CHEEVOS_VERSION=2.0.0"
+      "-DDSPERATE_CHEEVOS_VERSION=2.0.0",
+      "-DDSPERATE_PGO=use",
+      "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ]
+  },
+  "pgo": {
+    "dir": "standalone/pgo/aarch64",
+    "sha256": "205a6b1c8edf87d3d86af0ad75ed6ec5c534366327bdcd9377df705fe1dbf569",
+    "files": 96,
+    "fingerprint": "e5053f2d1f5b27e9ed70bda94b614845979aa599",
+    "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
+    "source_commit": "86bef065f93c55fc59c5ab5e93e06c812fcd7bf7",
+    "date": "2026-09-17T20:15Z",
+    "scenes": "mlbis sm64 etody dbori meteos gsdd nsmb",
+    "note": "Trained with this pak's own toolchain (Buildroot GCC 12.3.0) and flags so the fingerprint matches the release build; upstream's committed profile is for a different compiler and is refused. The headless frontend is the training build (the SDL frontend, rcheevos and the reference kernels are never trained). `st` is absent because the recorded save state is for another ROM revision. Verify with `-DDSPERATE_PGO_STRICT=ON`: 0 unexpected objects without a profile and 0 coverage mismatches."
   },
   "patches": [
     {
@@ -60,9 +73,9 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "dd02e8b8bbaffa58ef894668f74a441197556482be96cac47f23710d65de9375",
-    "size_bytes": 4599304,
-    "note": "Recorded after two clean FORCE=1 builds with the SDL Wayland define and all locked patches agree. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "a63ee1db30cf37de0b802217bedbd1cdd664855af350242d7235d0a347651646",
+    "size_bytes": 4378136,
+    "note": "Recorded after two clean FORCE=1 builds with the SDL Wayland define, all locked patches and the locked PGO profile agree. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
     "file_name": "dsperate-notice",

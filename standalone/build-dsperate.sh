@@ -45,6 +45,26 @@ print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())
 PY
 }
 
+# Deterministic digest of the whole PGO profile directory: every file's name and
+# bytes in sorted order, so the lock pins the exact profile the artifact was
+# built from and a drift is caught before the build, not by a drifting hash.
+profile_sha256() {
+  python3 - "$1" <<'PY'
+import hashlib, os, sys
+root = sys.argv[1]
+h = hashlib.sha256()
+for name in sorted(os.listdir(root)):
+    path = os.path.join(root, name)
+    if not os.path.isfile(path):
+        continue
+    h.update(name.encode("utf-8"))
+    h.update(b"\0")
+    with open(path, "rb") as f:
+        h.update(f.read())
+print(h.hexdigest())
+PY
+}
+
 SOURCE_URL="$(lock core source_url)"
 SOURCE_COMMIT="$(lock core source_commit)"
 IMAGE="$(lock toolchain image)"
@@ -57,6 +77,8 @@ EXPECTED_NOTICE_SHA="$(lock notice sha256)"
 SOURCE_EPOCH="$(lock build source_date_epoch)"
 GLIBC_CEILING="$(lock device glibc_ceiling)"
 CHEEVOS_VERSION="$(lock build cheevos_version)"
+PGO_DIR_REL="$(lock pgo dir)"
+PGO_SHA="$(lock pgo sha256)"
 
 # A tag can move; a digest cannot.
 IMAGE_REF="${IMAGE%%:*}@${DIGEST}"
@@ -116,7 +138,19 @@ EOF
     mkdir -p "$WORK_DIR" "$OUT_DIR"
   fi
 
-  say "building in $IMAGE_REF"
+  # The PGO profile is a build input like a patch: verify it against the lock
+  # before a byte of the binary exists, so a probe-refresh or a stray edit is
+  # caught here rather than as an artifact hash mismatch at the end.
+  PGO_ABS="$REPO_ROOT/$PGO_DIR_REL"
+  [ -d "$PGO_ABS" ] || die "PGO profile directory is missing: $PGO_DIR_REL"
+  [ -f "$PGO_ABS/MANIFEST" ] || die "PGO profile MANIFEST is missing: $PGO_DIR_REL"
+  actual_pgo="$(profile_sha256 "$PGO_ABS")"
+  [ "$actual_pgo" = "$PGO_SHA" ] || die "PGO profile sha256 mismatch
+  dir:    $PGO_DIR_REL
+  actual: $actual_pgo
+  locked: $PGO_SHA"
+
+  say "building in $IMAGE_REF with the locked PGO profile ($PGO_DIR_REL)"
   docker run --rm \
     -e CROSS="$CROSS" \
     -e SOURCE_DATE_EPOCH="$SOURCE_EPOCH" \

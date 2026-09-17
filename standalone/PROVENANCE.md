@@ -103,9 +103,50 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
 | `DSPERATE_CHEEVOS_VERSION` | `2.0.0` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
+| `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
+| `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
-(`1789612242`). PGO is off (upstream default), so no training data is needed.
+(`1789612242`).
+
+## Profile-guided optimisation
+
+The build consumes a PGO profile trained with **this same toolchain** (Buildroot
+GCC 12.3.0) and these same flags. Upstream ships an aarch64 profile too, but it
+was made with a GCC 13.3.0 `aarch64-linux-gnu` compiler and is refused by
+CMake's fingerprint check, and a `.gcda` is bound to the compiler that wrote it,
+so it cannot be used here.
+
+How the profile was produced (see `standalone/pgo/aarch64/MANIFEST`):
+
+- an instrumented headless build (`-DDSPERATE_PGO=generate`) configured with the
+  release flags, whose `pgo-fingerprint` matched the release build's
+  (`e5053f2d1f5b27e9ed70bda94b614845979aa599`);
+- seven of upstream's recorded scenes run on an MLP1 (`mlbis sm64 etody dbori
+  meteos gsdd nsmb`), with the real BIOS and firmware. `st` is absent because
+  the recorded save state is for another ROM revision, which the loader
+  refuses;
+- the resulting `.gcda` files, the `MANIFEST`, and a sha256 over the whole
+  directory, pinned in `upstream.lock.json`. The build refuses a profile whose
+  directory hash does not match the lock, and CMake refuses one whose compiler
+  or flags (the MANIFEST fingerprint) do not match the build.
+
+Verification: a `-DDSPERATE_PGO_STRICT=ON` build reports 0 unexpected objects
+without a profile and 0 coverage mismatches. The only objects without a profile
+are the groups a headless run never executes (the SDL frontend, rcheevos, the
+reference kernels, miniz), which is expected.
+
+Measured on MLP1 `43990f377d9284c1` with the headless frontend and
+`--quantum 0`, same scenes and dumps, non-PGO vs PGO:
+
+| scene | frames | median ms | p99 ms | total ms |
+| --- | --- | --- | --- | --- |
+| `mlbis` | 1800 | 10.78 -> 10.23 (-5.1%) | 16.44 -> 15.69 | 16484 -> 15683 (-4.9%) |
+| `gsdd` | 800 | 18.73 -> 17.96 (-4.1%) | 32.25 -> 31.32 | 15140 -> 14440 (-4.6%) |
+| `nsmb` | 1500 | 11.90 -> 10.82 (-9.1%) | 21.58 -> 20.31 | 15819 -> 14604 (-7.7%) |
+| `sm64` | 1800 | 4.55 -> 4.25 (-6.6%) | 11.24 -> 10.89 | 8545 -> 7953 (-6.9%) |
+
+Two clean `FORCE=1` builds with the locked profile agree byte for byte.
 
 ## Linkage
 
@@ -129,8 +170,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `dd02e8b8bbaffa58ef894668f74a441197556482be96cac47f23710d65de9375` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,599,304 bytes | 14,224 bytes |
+| sha256 | `a63ee1db30cf37de0b802217bedbd1cdd664855af350242d7235d0a347651646` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,378,136 bytes | 14,224 bytes |
 | Reproduced | clean `FORCE=1` builds agreed byte for byte | clean `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
