@@ -110,6 +110,16 @@ else
   git -C "$SRC_DIR" reset -q --hard "$SOURCE_COMMIT"
   git -C "$SRC_DIR" clean -qfd
 
+  # A forced rebuild clears ignored build outputs too, BEFORE the patches are
+  # applied: a patch that adds new source files leaves them untracked, and a
+  # clean afterwards would delete them and break the configure.
+  if [ "${FORCE:-0}" = "1" ]; then
+    say "forcing a clean rebuild"
+    git -C "$SRC_DIR" clean -qfdx
+    rm -rf "$WORK_DIR" "$OUT_DIR"
+    mkdir -p "$WORK_DIR" "$OUT_DIR"
+  fi
+
   PATCH_ROWS="$(python3 - "$LOCK" <<'PY'
 import json, sys
 for p in json.load(open(sys.argv[1], encoding="utf-8")).get("patches", []):
@@ -132,13 +142,6 @@ PY
     done <<EOF
 $PATCH_ROWS
 EOF
-  fi
-
-  if [ "${FORCE:-0}" = "1" ]; then
-    say "forcing a clean rebuild"
-    git -C "$SRC_DIR" clean -qfdx
-    rm -rf "$WORK_DIR" "$OUT_DIR"
-    mkdir -p "$WORK_DIR" "$OUT_DIR"
   fi
 
   if [ "$PGO_MODE" = "use" ]; then

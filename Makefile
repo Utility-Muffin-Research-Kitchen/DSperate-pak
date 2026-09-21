@@ -70,6 +70,7 @@ package-mlp1: standalone
 	@cp "$(REPO_ROOT)/pak/pak.json" "$(PACKAGE)/pak.json"
 	@cp "$(REPO_ROOT)/pak/art/"* "$(PACKAGE)/art/"
 	@cp "$(REPO_ROOT)/pak/res/icon.png" "$(PACKAGE)/res/icon.png"
+	@cp "$(REPO_ROOT)/pak/ra-account-v1" "$(PACKAGE)/ra-account-v1"
 	@cp "$(REPO_ROOT)/pak/scripts/run.sh" "$(PACKAGE)/scripts/run.sh"
 	@cp "$(REPO_ROOT)/pak/defaults/dsperate.ini" "$(PACKAGE)/defaults/dsperate.ini"
 	@cp "$(REPO_ROOT)/pak/defaults/config.version" "$(PACKAGE)/defaults/config.version"

@@ -37,12 +37,12 @@
   },
   "pgo": {
     "dir": "standalone/pgo/aarch64",
-    "sha256": "21fc16e1c70050224cec198bcb83c99fb7e93e03055b5eea7b8eb55fbe6aecd5",
+    "sha256": "cd37cc840f216c5cc1cf79fbf3ce901796fe94ab94ca0381657ef9637b425d63",
     "files": 98,
     "fingerprint": "e5053f2d1f5b27e9ed70bda94b614845979aa599",
     "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
     "source_commit": "baec96501802bb04203cac07b420c67eff8054b8",
-    "date": "2026-09-21T19:55Z",
+    "date": "2026-09-21T20:20Z",
     "scenes": "mlbis sm64 etody dbori meteos gsdd nsmb",
     "note": "Trained with this pak's toolchain and flags against the patched v2.1.1 tree, so the fingerprint matches the release build. The scenes are upstream's recorded replays; `st` was skipped because its save state is for another ROM revision, which the loader refuses. The headless frontend is the training build; the SDL frontend, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
   },
@@ -71,6 +71,11 @@
       "file": "0004-deterministic-version.patch",
       "sha256": "fc2cdbf8b04abc2af4423f2bca6b9dfc31c83db3def752b3fa21317c36da9bec",
       "note": "Makes --version report the lock's tag and commit deterministically. Upstream's generator derives the tag from git describe and the commit from git rev-parse, so a source archive without git says unknown and a patched checkout says <hash>-dirty. This patch prefers DSPERATE_LOCK_VERSION and DSPERATE_LOCK_COMMIT when the packager sets them, and leaves ordinary git development unchanged."
+    },
+    {
+      "file": "0005-dsperate-ra-account-adapter.patch",
+      "sha256": "d6d173434477b48584783639aa969a52694bf8451e496b29b1fd1e4784a14007",
+      "note": "The standalone-ra-account-v1 consumer. Adds the shared contract classifier and marker (verbatim with the Flycast consumer and the leaf-contracts reference), the managed-account bridge, the native login wiring (import, one password retry, sign-out), and native credential persistence. Consumes UMRK_RA_ACCOUNT_* after fork and never writes a password or token to a log or argv."
     }
   ],
   "toolchain": {
@@ -86,8 +91,8 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "47062e7d368ef938921edb8145cb37ca008d19d95fda340e426942d812888d23",
-    "size_bytes": 4447768,
+    "sha256": "572183deaee8611cd480a5213d2dc30db10a592e297948cbbaf1a57479bf581b",
+    "size_bytes": 4468248,
     "note": "Recorded after two clean FORCE=1 PGO builds agree on the v2.1.1 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
