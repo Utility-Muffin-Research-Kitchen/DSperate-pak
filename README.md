@@ -86,6 +86,25 @@ Install the pak on the primary card at `Apps/mlp1/DSperate.pak`. It is an
 ordinary content pak: the launcher compiles it into the catalog and offers
 DSperate in the Nintendo DS core picker.
 
+## RetroAchievements
+
+DSperate runs in casual mode and uses **the account saved in Leaf** (the
+launcher's Settings > Games > Accounts). Launch a game from Leaf and the account
+is imported automatically: there is no second login screen, and the account is
+verified against RetroAchievements the first time. Saving, changing or clearing
+it in Leaf takes effect on the next launch, with no reboot and no need to
+restart the launcher.
+
+Because Leaf owns the account, the in-game RetroAchievements page says
+`MANAGED BY LEAF` and does not offer a manual sign-in. Its **SIGN OUT is
+session-only**: it ends achievements for that session, and the next launch
+applies Leaf's saved account again. To sign out for good, clear the account in
+Leaf's Accounts; after that DSperate receives no credentials either.
+
+DSperate keeps its own sign-in token in
+`$USERDATA_PATH/dsperate/retroachievements/`, shared across games and cards;
+the account itself is never stored in a save or a state.
+
 ## Where your data lives
 
 | Data | Location |
@@ -96,6 +115,7 @@ DSperate in the Nintendo DS core picker.
 | Save states and screenshots | `$STATES_PATH/DSperate/<game key>/`, for the selected card |
 | ROM unpack cache | `$USERDATA_PATH/dsperate/cache/<game key>/`, always (never beside the ROM) |
 | Firmware settings sidecar | `$USERDATA_PATH/dsperate/games/<game key>/firmware.ovr` |
+| RetroAchievements token | `$USERDATA_PATH/dsperate/retroachievements/`, primary card, shared across games |
 | Log | `$LOGS_PATH/dsperate.log` |
 
 The game key hashes the logical card slot (`primary` or `secondary_sd`) and
