@@ -1150,7 +1150,7 @@ index 0000000..b26763a
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 4bd7ed8..038ed2f 100644
+index 4bd7ed8..e34d5ce 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
 @@ -26,6 +26,7 @@
@@ -1190,7 +1190,61 @@ index 4bd7ed8..038ed2f 100644
  #endif
  // Networking is not a part of the achievements feature, and used to be nested
  // inside its guard: DSPERATE_CHEEVOS=OFF with DSPERATE_NET=ON would not
-@@ -3628,6 +3642,32 @@ sdl_ready:
+@@ -3459,26 +3473,44 @@ sdl_ready:
+     }
+     std::string status() const override {
+       if (!c) return "NOT AVAILABLE IN THIS BUILD";
++      std::string base;
+       switch (c->state()) {
+       case ds::cheevos::State::Off:
+-        return c->unavailable_reason().empty() ? "TURNED OFF" : c->unavailable_reason();
+-      case ds::cheevos::State::SignedOut:   return "NOT SIGNED IN";
+-      case ds::cheevos::State::SigningIn:   return "SIGNING IN...";
+-      case ds::cheevos::State::SignedIn:    return "SIGNED IN AS " + c->username();
+-      case ds::cheevos::State::LoadingGame: return "LOADING ACHIEVEMENTS...";
+-      case ds::cheevos::State::Playing:     return "SIGNED IN AS " + c->username();
++        base = c->unavailable_reason().empty() ? "TURNED OFF" : c->unavailable_reason();
++        break;
++      case ds::cheevos::State::SignedOut:   base = "NOT SIGNED IN"; break;
++      case ds::cheevos::State::SigningIn:   base = "SIGNING IN..."; break;
++      case ds::cheevos::State::SignedIn:    base = "SIGNED IN AS " + c->username(); break;
++      case ds::cheevos::State::LoadingGame: base = "LOADING ACHIEVEMENTS..."; break;
++      case ds::cheevos::State::Playing:     base = "SIGNED IN AS " + c->username(); break;
+       // The dump is recognised; the game simply has no set yet. Said plainly
+       // so nobody goes looking for a list that does not exist.
+       case ds::cheevos::State::EmptySet:
+-        return "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
++        base = "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
++        break;
+       case ds::cheevos::State::NoSet:
+         // The hash is the actionable part: RetroAchievements identifies a dump,
+         // so a ROM from your own cart often is not one it knows even when the
+         // game has a set. With the hash the player can ask for theirs to be
+         // added; without it this line is a dead end.
+-        return "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
++        base = "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
++        break;
+       }
+-      return "";
++      // UMRK: say plainly that Leaf owns the account, so the missing manual
++      // sign-in does not read as a fault. The bridge's reason is the detail.
++      if (ds::cheevos::ra_account::isManaged() || ds::cheevos::ra_account::isSuppressed()) {
++        const std::string why = ds::cheevos::ra_account::statusLine();
++        if (signed_in()) {
++          base += " - MANAGED BY LEAF";
++        } else {
++          base = "MANAGED BY LEAF";
++          if (!why.empty()) base += " - " + why;
++        }
++      }
++      return base;
++    }
++    bool managed() const override {
++      return ds::cheevos::ra_account::isManaged() || ds::cheevos::ra_account::isSuppressed();
+     }
+     std::string progress() const override {
+       if (!c || sum.total == 0) return {};
+@@ -3628,6 +3660,32 @@ sdl_ready:
        // nothing else to try here; a token the server has expired comes back as
        // a failure and the player signs in again from the menu (phase 4).
        ds::cheevos::Credentials creds;
@@ -1223,7 +1277,7 @@ index 4bd7ed8..038ed2f 100644
        // A token file named on the command line comes first: it is this run's
        // explicit instruction, and the point of it is to override whatever is
        // stored. Nothing is written back -- the file is not ours, and the run
-@@ -3666,6 +3706,7 @@ sdl_ready:
+@@ -3666,6 +3724,7 @@ sdl_ready:
        }
        if (!creds.empty()) cheevos.sign_in_with_token(creds.username, creds.token);
        else std::fprintf(stderr, "cheevos: not signed in\n");
@@ -1231,3 +1285,35 @@ index 4bd7ed8..038ed2f 100644
  
        // The game's identity, computed now and used when the sign-in lands.
        // Hashing the cart's own source is safe *because* read_unpatched reads
+diff --git a/src/frontend/sdl/menu.cpp b/src/frontend/sdl/menu.cpp
+index 60a3b44..6c27a64 100644
+--- a/src/frontend/sdl/menu.cpp
++++ b/src/frontend/sdl/menu.cpp
+@@ -936,7 +936,10 @@ int account_rows(const CheevosHost* h, AccountRow out[kAccountRows]) {
+   int n = 0;
+   if (!h) return 0;
+   if (h->signed_in()) out[n++] = AccountRow::SignOut;
+-  else out[n++] = AccountRow::SignIn;
++  // A managed account (standalone-ra-account-v1) offers no manual sign-in: the
++  // player would otherwise replace the identity Leaf just imported. Signing
++  // out here stays session-only; the permanent sign-out is in Leaf.
++  else if (!h->managed()) out[n++] = AccountRow::SignIn;
+   if (h->has_set() && h->row_count() > 0) out[n++] = AccountRow::List;
+   out[n++] = AccountRow::Toasts;
+   out[n++] = AccountRow::Screenshot;
+diff --git a/src/frontend/sdl/menu.h b/src/frontend/sdl/menu.h
+index a0804a6..c1d5544 100644
+--- a/src/frontend/sdl/menu.h
++++ b/src/frontend/sdl/menu.h
+@@ -95,6 +95,11 @@ struct CheevosHost {
+   virtual bool signed_in() const = 0;
+   virtual bool has_set() const = 0;
+ 
++  // UMRK: true when the account is owned by Leaf (standalone-ra-account-v1).
++  // The account page then offers no manual SIGN IN, because doing so would
++  // silently replace the managed identity, and says the account is managed.
++  virtual bool managed() const { return false; }
++
+   virtual int  row_count() const = 0;
+   virtual Row  row(int i) const = 0;
+ 
