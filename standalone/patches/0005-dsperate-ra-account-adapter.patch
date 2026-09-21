@@ -1150,7 +1150,7 @@ index 0000000..b26763a
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 4bd7ed8..e34d5ce 100644
+index 4bd7ed8..7ded723 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
 @@ -26,6 +26,7 @@
@@ -1172,6 +1172,15 @@ index 4bd7ed8..e34d5ce 100644
  #endif
      else if (flag("--autoload")) cli.set("emu.autoload", "true");
      else if (flag("--no-autoload")) cli.set("emu.autoload", "false");
+@@ -1382,7 +1387,7 @@ static int run(int argc, char** argv) {
+   }
+   auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
+                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.disp", "video.fbdev", "video.vsync", "audio.enabled", "audio.volume",
+-                                              "audio.mic", "emu.jit", "emu.quantum", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.timing_oc", "emu.gx_worker", "emu.cpu_tuning", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
++                                              "audio.mic", "emu.jit", "emu.quantum", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.timing_oc", "emu.gx_worker", "emu.cpu_tuning", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username", "cheevos.managed_dir"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
+   apply_cli();
+   if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
+   const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
 @@ -3158,7 +3163,16 @@ sdl_ready:
    // unless asked for, and every failure here is reported once and then ignored:
    // a device with no libcurl, no network, or no account still plays games.

@@ -74,7 +74,7 @@
     },
     {
       "file": "0005-dsperate-ra-account-adapter.patch",
-      "sha256": "efe21d16440933ce1f337a9fd91bbaf5226b22abb39f2297c8b4ccce013ab4fc",
+      "sha256": "52316a132a40a96068d5ce75e15de127a3b983c6f66cab775f2c2ddb6df05e8f",
       "note": "The standalone-ra-account-v1 consumer. Adds the shared contract classifier and marker (verbatim with the Flycast consumer and the leaf-contracts reference), the managed-account bridge, the native login wiring (import, one password retry, sign-out), and native credential persistence. Consumes UMRK_RA_ACCOUNT_* after fork and never writes a password or token to a log or argv."
     }
   ],
@@ -91,8 +91,8 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "74c2ce5d0242fe529c951f1ec8765a37529ba70d45023db5cd2a890d47ee8aaa",
-    "size_bytes": 4472344,
+    "sha256": "75a080e58b4350934d30ab405cfbe98e31eed1cc5c71188abcfcde4ac6e807df",
+    "size_bytes": 4472360,
     "note": "Recorded after two clean FORCE=1 PGO builds agree on the v2.1.1 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
