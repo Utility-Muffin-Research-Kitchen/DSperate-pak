@@ -1,5 +1,6 @@
 {
   "name": "DSperate",
+  "id": "org.umrk.dsperate",
   "platform": "mlp1",
   "pak_version": "2.1.1",
   "min_leaf_version": "0.12.0",
