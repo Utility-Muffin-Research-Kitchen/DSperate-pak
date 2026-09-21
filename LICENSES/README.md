@@ -32,8 +32,9 @@ This repository discharges that by construction rather than by promise:
   toolchain image and refuses to package an artifact whose sha256 does not
   match its lock.
 - `make dist-source` produces an archive to publish **alongside** the pak: the
-  patched DSperate tree, the locked PGO profiles, notice-program source, build
-  scripts, toolchain configuration, wrapper, metadata and licence notices.
+  patched DSperate tree, notice-program source, build scripts, toolchain
+  configuration, wrapper, metadata and licence notices (and the locked PGO
+  profile when the lock uses one).
 
 If you fork this repository and change a pin, republish the source for your pin:
 the obligation follows the binary you distributed, not the one upstream

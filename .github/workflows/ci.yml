@@ -59,7 +59,10 @@ jobs:
           echo "no sibling-checkout references"
 
   build:
-    runs-on: ubuntu-latest
+    # Native arm64: an independent build on the device architecture. The
+    # toolchain image is a cross-compiler, so the host variant does not change
+    # the target where it matters, but building on arm64 removes any doubt.
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 

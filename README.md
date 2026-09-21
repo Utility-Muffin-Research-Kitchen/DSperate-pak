@@ -22,9 +22,17 @@ clean clone with no sibling checkout.
 ## Status
 
 [DSperate 2.0.0](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.0.0)
-is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The source pin is
-**DSperate v2.0.0**, with three reviewed pak patches. Two clean builds reproduce
-the binary, and wrapper, profile, archive CLI and focused upstream tests pass.
+is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
+candidate updates the source pin to **DSperate v2.1.1** with four reviewed pak
+patches. It is host-verified only so far: two clean builds reproduce the
+unprofiled binary `b1b6c341…`, `--version` is deterministic from the lock, and
+`make check`, `make dist-pakrat` and `make dist-source` pass. Device
+requalification, including the performance measurement the unprofiled build
+needs, is pending, so no 2.1.1 pak is published.
+
+The published 2.0.0 source pin was DSperate v2.0.0 with three reviewed pak
+patches. Two clean builds reproduce its binary, and wrapper, profile, archive
+CLI and focused upstream tests passed.
 The v2.0.0 binary also passed an MLP1 hardware re-qualification on 2026-09-17:
 Jawaka path-core launch and orientation, Menu and controls, old-state loading,
 save and save-state faults, running and paused suspend/resume, and sustained
@@ -51,11 +59,13 @@ make dist-source    # GPL corresponding source for the shipped binary
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
+This candidate builds without PGO; see `standalone/PROVENANCE.md` for the
+recorded decision and a later candidate's path to a GCC 12.3.0 profile.
 
 Publish the corresponding-source archive beside the pak ZIP. It includes the
-patched upstream tree in `dsperate-src/`, plus the build scripts, locked PGO
-profiles, notice-program source and package files. `make dist-source` checks
-that the archive contains the locked build inputs before accepting it.
+patched upstream tree in `dsperate-src/`, plus the build scripts, notice-program
+source and package files. `make dist-source` checks that the archive contains
+the locked build inputs before accepting it.
 
 ## Install
 

@@ -77,8 +77,9 @@ EXPECTED_NOTICE_SHA="$(lock notice sha256)"
 SOURCE_EPOCH="$(lock build source_date_epoch)"
 GLIBC_CEILING="$(lock device glibc_ceiling)"
 CHEEVOS_VERSION="$(lock build cheevos_version)"
-PGO_DIR_REL="$(lock pgo dir)"
-PGO_SHA="$(lock pgo sha256)"
+PGO_MODE="$(lock build pgo)"
+APP_VERSION="$(lock version tag)"
+APP_COMMIT="$(lock version commit)"
 
 # A tag can move; a digest cannot.
 IMAGE_REF="${IMAGE%%:*}@${DIGEST}"
@@ -138,19 +139,25 @@ EOF
     mkdir -p "$WORK_DIR" "$OUT_DIR"
   fi
 
-  # The PGO profile is a build input like a patch: verify it against the lock
-  # before a byte of the binary exists, so a probe-refresh or a stray edit is
-  # caught here rather than as an artifact hash mismatch at the end.
-  PGO_ABS="$REPO_ROOT/$PGO_DIR_REL"
-  [ -d "$PGO_ABS" ] || die "PGO profile directory is missing: $PGO_DIR_REL"
-  [ -f "$PGO_ABS/MANIFEST" ] || die "PGO profile MANIFEST is missing: $PGO_DIR_REL"
-  actual_pgo="$(profile_sha256 "$PGO_ABS")"
-  [ "$actual_pgo" = "$PGO_SHA" ] || die "PGO profile sha256 mismatch
+  if [ "$PGO_MODE" = "use" ]; then
+    # The PGO profile is a build input like a patch: verify it against the lock
+    # before a byte of the binary exists, so a probe-refresh or a stray edit is
+    # caught here rather than as an artifact hash mismatch at the end.
+    PGO_DIR_REL="$(lock pgo dir)"
+    PGO_SHA="$(lock pgo sha256)"
+    PGO_ABS="$REPO_ROOT/$PGO_DIR_REL"
+    [ -d "$PGO_ABS" ] || die "PGO profile directory is missing: $PGO_DIR_REL"
+    [ -f "$PGO_ABS/MANIFEST" ] || die "PGO profile MANIFEST is missing: $PGO_DIR_REL"
+    actual_pgo="$(profile_sha256 "$PGO_ABS")"
+    [ "$actual_pgo" = "$PGO_SHA" ] || die "PGO profile sha256 mismatch
   dir:    $PGO_DIR_REL
   actual: $actual_pgo
   locked: $PGO_SHA"
-
-  say "building in $IMAGE_REF with the locked PGO profile ($PGO_DIR_REL)"
+    say "building in $IMAGE_REF with the locked PGO profile ($PGO_DIR_REL)"
+  else
+    [ "$PGO_MODE" = "off" ] || die "unsupported build.pgo mode: $PGO_MODE"
+    say "building in $IMAGE_REF without PGO (${PGO_MODE})"
+  fi
   docker run --rm \
     -e CROSS="$CROSS" \
     -e SOURCE_DATE_EPOCH="$SOURCE_EPOCH" \
@@ -158,6 +165,8 @@ EOF
     -e ARTIFACT="$ARTIFACT" \
     -e NOTICE_ARTIFACT="$NOTICE_ARTIFACT" \
     -e CHEEVOS_VERSION="$CHEEVOS_VERSION" \
+    -e DSPERATE_LOCK_VERSION="$APP_VERSION" \
+    -e DSPERATE_LOCK_COMMIT="$APP_COMMIT" \
     -v "$SRC_DIR":/src \
     -v "$WORK_DIR":/work \
     -v "$OUT_DIR":/out \

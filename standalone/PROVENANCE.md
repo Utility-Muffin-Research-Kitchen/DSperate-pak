@@ -8,24 +8,25 @@ Everything here is measured from the build, not from memory.
 | | |
 | --- | --- |
 | Upstream | `https://github.com/beebono/DSperate.git` |
-| Tag | `v2.0.0` |
-| Commit | `86bef065f93c55fc59c5ab5e93e06c812fcd7bf7` |
+| Tag | `v2.1.1` |
+| Commit | `baec96501802bb04203cac07b420c67eff8054b8` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
-| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch` and `patches/0003-lid-resume-no-fabricated-close.patch` (sha256-locked; see below) |
+| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch` and `patches/0004-deterministic-version.patch` (sha256-locked; see below) |
 
 ## Patches
 
-The three patches are locked by sha256 in `upstream.lock.json`; the build
+The four patches are locked by sha256 in `upstream.lock.json`; the build
 applies them in order and refuses a patch whose hash differs.
 
-Reviewed against [upstream v2.0.0](https://github.com/beebono/DSperate/releases/tag/v2.0.0)
-on 2026-09-17:
+Reviewed against [upstream v2.1.1](https://github.com/beebono/DSperate/releases/tag/v2.1.1)
+on 2026-09-21:
 
 | Patch | Decision |
 | --- | --- |
-| 0001 archive/cache policy | Keep. Upstream's ZIP parser and cache selection are unchanged. Rebase frontend context around the expanded CLI; retain every new upstream CLI setting. |
-| 0002 save durability | Keep checked writes and firmware flush/close. Drop the old fixed-size loading check: upstream now detects unlisted save chips, understands DeSmuME footers and backs up size mismatches. |
-| 0003 lid/resume | Keep byte for byte. Upstream's lid implementation is unchanged and still fabricates a close on a device with no switch. |
+| 0001 archive/cache policy | Keep and rebase. v2.1.1 renamed `find_nds` to `find_rom` and widened the entry kinds to `.nds/.dsi/.srl/.cia`; the cache-root, single-entry and unsafe-path policies are still absent upstream, so they are re-expressed against `find_rom`. |
+| 0002 save durability | Keep. Re-anchored onto v2.1.1's larger SDL frontend; checked writes and firmware flush/close are unchanged. |
+| 0003 lid/resume | Keep. v2.1.1's lid implementation is unchanged and still fabricates a close on a device with no switch. |
+| 0004 deterministic `--version` | New. Prefers the lock's tag and commit over git so a source archive and a patched checkout report the same identity. |
 
 `standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
 archive policy.
@@ -37,17 +38,25 @@ It adds three opt-in command-line flags and the two settings behind them:
   directory beside a writable ROM. The pak pins the cache to
   `$USERDATA_PATH/dsperate/cache/<key>/`.
 - `--single-rom` (`[cart] single_nds`): refuse an archive that holds more than
-  one eligible `.nds` entry instead of picking one by game database and
+  one eligible image entry instead of picking one by game database and
   revision. The pak wants one unambiguous game per archive.
 - `--inspect-cart FILE`: print `kind`, `extract`, `bytes` and `entry` for a
   cartridge and exit without booting anything, or exit non-zero with the reason
   on stderr. The wrapper sizes and bounds its cache with this and refuses an
   unreadable archive before a window opens.
 
-The same patch rejects an `.nds` entry whose name is absolute or carries a `..`
+The same patch rejects an image entry whose name is absolute or carries a `..`
 component. Upstream already refuses encryption, zip64 and unknown compression;
 this closes the remaining path-shaped case, and the extraction target was never
 derived from the entry name in any case.
+
+`standalone/patches/0004-deterministic-version.patch` makes `--version` report
+the lock's release tag and commit. Upstream's generator takes the tag from
+`git describe` and the commit from `git rev-parse`, so a corresponding-source
+archive without git says `unknown` and a patched checkout says `<hash>-dirty`.
+The patch prefers `DSPERATE_LOCK_VERSION` and `DSPERATE_LOCK_COMMIT`, which
+`build-in-container.sh` exports from the lock, and leaves ordinary git
+development unchanged.
 
 The cache-root and single-ROM policies default off. Unsafe archive entry
 names are rejected regardless of those flags.
@@ -102,51 +111,30 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_NET` | `ON` | upstream default; vendored ENet and libslirp are linked statically; network sessions default off |
 | `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
-| `DSPERATE_CHEEVOS_VERSION` | `2.0.0` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
-| `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
-| `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
+| `DSPERATE_CHEEVOS_VERSION` | `2.1.1` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
+| `DSPERATE_PGO` | `off` | this candidate ships unprofiled (see below) |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
-(`1789612242`).
+(`1789871851`). `DSPERATE_LOCK_VERSION=v2.1.1` and
+`DSPERATE_LOCK_COMMIT=baec965` are exported from the lock so `--version` is
+deterministic.
 
 ## Profile-guided optimisation
 
-The build consumes a PGO profile trained with **this same toolchain** (Buildroot
-GCC 12.3.0) and these same flags. Upstream ships an aarch64 profile too, but it
-was made with a GCC 13.3.0 `aarch64-linux-gnu` compiler and is refused by
-CMake's fingerprint check, and a `.gcda` is bound to the compiler that wrote it,
-so it cannot be used here.
+This candidate ships **without PGO**. The v2.0.0 locked profile was trained with
+this pak's toolchain (Buildroot GCC 12.3.0) and is bound to the v2.0.0 source:
+the `.gcda` format is compiler-version-checked and CMake's fingerprint covers
+the compiler, flags and build type, while source changes leave the affected
+functions without a profile. Upstream v2.1.1 ships profiles for GCC 10.5
+(`pgo/aarch64`) and GCC 12.4.0 only, neither usable by GCC 12.3.0.
 
-How the profile was produced (see `standalone/pgo/aarch64/MANIFEST`):
-
-- an instrumented headless build (`-DDSPERATE_PGO=generate`) configured with the
-  release flags, whose `pgo-fingerprint` matched the release build's
-  (`e5053f2d1f5b27e9ed70bda94b614845979aa599`);
-- seven of upstream's recorded scenes run on an MLP1 (`mlbis sm64 etody dbori
-  meteos gsdd nsmb`), with the real BIOS and firmware. `st` is absent because
-  the recorded save state is for another ROM revision, which the loader
-  refuses;
-- the resulting `.gcda` files, the `MANIFEST`, and a sha256 over the whole
-  directory, pinned in `upstream.lock.json`. The build refuses a profile whose
-  directory hash does not match the lock, and CMake refuses one whose compiler
-  or flags (the MANIFEST fingerprint) do not match the build.
-
-Verification: a `-DDSPERATE_PGO_STRICT=ON` build reports 0 unexpected objects
-without a profile and 0 coverage mismatches. The only objects without a profile
-are the groups a headless run never executes (the SDL frontend, rcheevos, the
-reference kernels, miniz), which is expected.
-
-Measured on MLP1 `43990f377d9284c1` with the headless frontend and
-`--quantum 0`, same scenes and dumps, non-PGO vs PGO:
-
-| scene | frames | median ms | p99 ms | total ms |
-| --- | --- | --- | --- | --- |
-| `mlbis` | 1800 | 10.78 -> 10.23 (-5.1%) | 16.44 -> 15.69 | 16484 -> 15683 (-4.9%) |
-| `gsdd` | 800 | 18.73 -> 17.96 (-4.1%) | 32.25 -> 31.32 | 15140 -> 14440 (-4.6%) |
-| `nsmb` | 1500 | 11.90 -> 10.82 (-9.1%) | 21.58 -> 20.31 | 15819 -> 14604 (-7.7%) |
-| `sm64` | 1800 | 4.55 -> 4.25 (-6.6%) | 11.24 -> 10.89 | 8545 -> 7953 (-6.9%) |
-
-Two clean `FORCE=1` builds with the locked profile agree byte for byte.
+Retraining the headless scenes needs games and hardware, which ordinary rebuilds
+must not. The GCC 12.3.0 profile is therefore removed for this candidate and the
+lock records `build.pgo = off`. The v2.0.0 profile measured (on MLP1
+`43990f377d9284c1`, headless, `--quantum 0`) a 4-9% median improvement on its
+scenes; a v2.1.1 profile has not been measured. A later candidate can add one
+with a GCC 12.3.0 training build without changing this unprofiled artifact.
+Device performance of this candidate must be re-measured before any claim.
 
 ## Linkage
 
@@ -170,9 +158,9 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `a63ee1db30cf37de0b802217bedbd1cdd664855af350242d7235d0a347651646` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,378,136 bytes | 14,224 bytes |
-| Reproduced | clean `FORCE=1` builds agreed byte for byte | clean `FORCE=1` builds agreed byte for byte |
+| sha256 | `b1b6c3410174287642c9ead95d834f436aea9830024b85c7defe416cd50690ac` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,693,528 bytes | 14,224 bytes |
+| Reproduced | two clean `FORCE=1` builds agreed byte for byte (unprofiled) | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
 cannot proceed. It links only SDL2 and SDL_ttf, both provided by the MLP1, and
@@ -213,7 +201,15 @@ does not confirm the real tier, so a silently stubbed build cannot ship.
 The dmabuf allocation, Weston import, orientation and performance are qualified
 on the device separately; the SDL window-surface route remains the fallback.
 
-## v2.0.0 verification
+## v2.0.0 verification (historical)
+
+The v2.0.0 release checks below are retained as history. The v2.1.1 candidate in
+this revision is host-verified only: the patched source builds unprofiled to
+`b1b6c341…`, two clean `FORCE=1` builds agree, `--version` reports
+`v2.1.1 (baec965)` from the lock, and `make check`, `make dist-pakrat` and
+`make dist-source` pass (82 wrapper checks, 14 MLP1 profile checks, packaged-tree
+validation). Device requalification of v2.1.1, including the performance the
+unprofiled build must re-measure, is pending.
 
 Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
 runtime library allowlist are unchanged. The larger emulator contains the new

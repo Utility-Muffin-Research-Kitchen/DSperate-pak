@@ -10,6 +10,10 @@ set -euo pipefail
 
 : "${CROSS:?}" "${SOURCE_DATE_EPOCH:?}" "${GLIBC_CEILING:?}" "${ARTIFACT:?}" "${CHEEVOS_VERSION:?}" "${NOTICE_ARTIFACT:?}"
 export SOURCE_DATE_EPOCH
+# The locked --version identity. cmake/version.cmake prefers these over git, so
+# the stamp is the same from a git checkout and a corresponding-source archive.
+export DSPERATE_LOCK_VERSION="${DSPERATE_LOCK_VERSION:?}"
+export DSPERATE_LOCK_COMMIT="${DSPERATE_LOCK_COMMIT:?}"
 export PATH="/opt/mlp1-toolchain/bin:$PATH"
 
 BUILD=/work/build
@@ -39,8 +43,7 @@ cmake -S /src -B "$BUILD" -G Ninja \
   -DDSPERATE_CHEEVOS=ON \
   -DDSPERATE_WAYLAND=ON \
   -DDSPERATE_CHEEVOS_VERSION="$CHEEVOS_VERSION" \
-  -DDSPERATE_PGO=use \
-  -DDSPERATE_PGO_DIR=/standalone/pgo/aarch64 \
+  -DDSPERATE_PGO=OFF \
   >/work/configure.log 2>&1 || { echo "build-in-container: configure failed;" >&2; tail -60 /work/configure.log >&2; exit 1; }
 
 # The playable SDL frontend is the whole point of this package. If SDL2 was not
