@@ -112,7 +112,8 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
 | `DSPERATE_CHEEVOS_VERSION` | `2.1.1` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
-| `DSPERATE_PGO` | `off` | this candidate ships unprofiled (see below) |
+| `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
+| `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
 (`1789871851`). `DSPERATE_LOCK_VERSION=v2.1.1` and
@@ -121,19 +122,30 @@ deterministic.
 
 ## Profile-guided optimisation
 
-This candidate ships **without PGO**. The v2.0.0 locked profile was trained with
-this pak's toolchain (Buildroot GCC 12.3.0) and is bound to the v2.0.0 source:
-the `.gcda` format is compiler-version-checked and CMake's fingerprint covers
-the compiler, flags and build type, while source changes leave the affected
-functions without a profile. Upstream v2.1.1 ships profiles for GCC 10.5
-(`pgo/aarch64`) and GCC 12.4.0 only, neither usable by GCC 12.3.0.
+The build consumes a PGO profile trained with **this same toolchain** (Buildroot
+GCC 12.3.0) and these same flags, against the patched v2.1.1 source. Upstream
+v2.1.1 ships profiles for GCC 10.5 and 12.4.0 only; CMake's fingerprint check
+refuses those, and a `.gcda` is bound to the compiler that wrote it, so they
+cannot be used here. The profile was retrained for the port rather than carried
+from v2.0.0, whose profile is tied to the v2.0.0 source.
 
-Retraining the headless scenes needs games and hardware, which ordinary rebuilds
-must not. The GCC 12.3.0 profile is therefore removed for this candidate and the
-lock records `build.pgo = off`. The v2.0.0 profile measured (on MLP1
-`43990f377d9284c1`, headless, `--quantum 0`) a 4-9% median improvement on its
-scenes; a v2.1.1 profile has not been measured. A later candidate can add one
-with a GCC 12.3.0 training build without changing this unprofiled artifact.
+How the profile was produced (see `standalone/pgo/aarch64/MANIFEST`):
+
+- an instrumented headless build (`-DDSPERATE_PGO=generate`) configured with the
+  release flags, whose `pgo-fingerprint` matched the release build's
+  (`e5053f2d1f5b27e9ed70bda94b614845979aa599`);
+- seven of upstream's recorded scenes (`mlbis sm64 etody dbori meteos gsdd
+  nsmb`), with the real BIOS and firmware. `st` is absent because the recorded
+  save state is for another ROM revision, which the loader refuses;
+- the resulting `.gcda` files, the `MANIFEST`, and a sha256 over the whole
+  directory, pinned in `upstream.lock.json`. The build refuses a profile whose
+  directory hash does not match the lock, and CMake refuses one whose compiler
+  or flags (the MANIFEST fingerprint) do not match the build.
+
+Verification: a `-DDSPERATE_PGO_STRICT=ON` build reports 0 objects without a
+profile outside the never-trained groups (the SDL frontend, rcheevos, the
+reference kernels, miniz) and 0 coverage mismatches. Two clean `FORCE=1` builds
+with the locked profile agree byte for byte.
 Device performance of this candidate must be re-measured before any claim.
 
 ## Linkage
@@ -158,9 +170,9 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `b1b6c3410174287642c9ead95d834f436aea9830024b85c7defe416cd50690ac` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,693,528 bytes | 14,224 bytes |
-| Reproduced | two clean `FORCE=1` builds agreed byte for byte (unprofiled) | `FORCE=1` builds agreed byte for byte |
+| sha256 | `47062e7d368ef938921edb8145cb37ca008d19d95fda340e426942d812888d23` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,447,768 bytes | 14,224 bytes |
+| Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
 cannot proceed. It links only SDL2 and SDL_ttf, both provided by the MLP1, and
@@ -204,12 +216,13 @@ on the device separately; the SDL window-surface route remains the fallback.
 ## v2.0.0 verification (historical)
 
 The v2.0.0 release checks below are retained as history. The v2.1.1 candidate in
-this revision is host-verified only: the patched source builds unprofiled to
-`b1b6c341…`, two clean `FORCE=1` builds agree, `--version` reports
+this revision is host-verified only: the patched source builds with the retrained
+GCC 12.3.0 profile to `47062e7d…`, two clean `FORCE=1` builds agree, the strict
+profile check passes, `--version` reports
 `v2.1.1 (baec965)` from the lock, and `make check`, `make dist-pakrat` and
 `make dist-source` pass (82 wrapper checks, 14 MLP1 profile checks, packaged-tree
-validation). Device requalification of v2.1.1, including the performance the
-unprofiled build must re-measure, is pending.
+validation). Device requalification of v2.1.1, including the performance the new
+profile must re-measure, is pending.
 
 Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
 runtime library allowlist are unchanged. The larger emulator contains the new

@@ -19,8 +19,8 @@
     "source_date_note": "The pinned v2.1.1 commit's committer timestamp.",
     "cheevos_version": "2.1.1",
     "cheevos_version_note": "Passed explicitly because a shallow checkout has no tags for upstream's `git describe` fallback.",
-    "pgo": "off",
-    "pgo_note": "PGO is off for this candidate. The v2.0.0 locked profile was trained with this toolchain (Buildroot GCC 12.3.0) and is tied to the v2.0.0 source. Upstream v2.1.1 ships profiles for GCC 10.5 (pgo/aarch64) and GCC 12.4.0 only; the .gcda format and the compiler-version fingerprint make both unusable here. Retraining the headless scenes needs hardware and games, which ordinary rebuilds must not, so this candidate ships unprofiled. Re-measure on device; a later candidate can add a GCC 12.3.0 profile without changing this one.",
+    "pgo": "use",
+    "pgo_note": "A fresh aarch64 profile was trained with this pak's own toolchain (Buildroot GCC 12.3.0) and these flags against the patched v2.1.1 source, so its fingerprint matches the release build. Upstream v2.1.1 ships profiles for GCC 10.5 and 12.4.0 only, which this toolchain refuses.",
     "cmake": [
       "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
       "-DCMAKE_TOOLCHAIN_FILE=<standalone>/mlp1-toolchain.cmake",
@@ -30,8 +30,20 @@
       "-DDSPERATE_CHEEVOS=ON",
       "-DDSPERATE_WAYLAND=ON",
       "-DDSPERATE_CHEEVOS_VERSION=2.1.1",
-      "-DDSPERATE_PGO=OFF"
+      "-DDSPERATE_PGO=use",
+      "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ]
+  },
+  "pgo": {
+    "dir": "standalone/pgo/aarch64",
+    "sha256": "21fc16e1c70050224cec198bcb83c99fb7e93e03055b5eea7b8eb55fbe6aecd5",
+    "files": 98,
+    "fingerprint": "e5053f2d1f5b27e9ed70bda94b614845979aa599",
+    "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
+    "source_commit": "baec96501802bb04203cac07b420c67eff8054b8",
+    "date": "2026-09-21T19:55Z",
+    "scenes": "mlbis sm64 etody dbori meteos gsdd nsmb",
+    "note": "Trained with this pak's toolchain and flags against the patched v2.1.1 tree, so the fingerprint matches the release build. The scenes are upstream's recorded replays; `st` was skipped because its save state is for another ROM revision, which the loader refuses. The headless frontend is the training build; the SDL frontend, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
   },
   "version": {
     "tag": "v2.1.1",
@@ -73,9 +85,9 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "b1b6c3410174287642c9ead95d834f436aea9830024b85c7defe416cd50690ac",
-    "size_bytes": 4693528,
-    "note": "Recorded after two clean FORCE=1 builds agree on the v2.1.1 candidate, unprofiled (build.pgo = off). CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "47062e7d368ef938921edb8145cb37ca008d19d95fda340e426942d812888d23",
+    "size_bytes": 4447768,
+    "note": "Recorded after two clean FORCE=1 PGO builds agree on the v2.1.1 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
     "file_name": "dsperate-notice",

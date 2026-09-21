@@ -43,7 +43,8 @@ cmake -S /src -B "$BUILD" -G Ninja \
   -DDSPERATE_CHEEVOS=ON \
   -DDSPERATE_WAYLAND=ON \
   -DDSPERATE_CHEEVOS_VERSION="$CHEEVOS_VERSION" \
-  -DDSPERATE_PGO=OFF \
+  -DDSPERATE_PGO=use \
+  -DDSPERATE_PGO_DIR=/standalone/pgo/aarch64 \
   >/work/configure.log 2>&1 || { echo "build-in-container: configure failed;" >&2; tail -60 /work/configure.log >&2; exit 1; }
 
 # The playable SDL frontend is the whole point of this package. If SDL2 was not

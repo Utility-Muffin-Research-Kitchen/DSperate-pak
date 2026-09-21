@@ -25,10 +25,10 @@ clean clone with no sibling checkout.
 is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
 candidate updates the source pin to **DSperate v2.1.1** with four reviewed pak
 patches. It is host-verified only so far: two clean builds reproduce the
-unprofiled binary `b1b6c341…`, `--version` is deterministic from the lock, and
-`make check`, `make dist-pakrat` and `make dist-source` pass. Device
-requalification, including the performance measurement the unprofiled build
-needs, is pending, so no 2.1.1 pak is published.
+profile-guided binary `47062e7d…`, the strict profile check passes, `--version`
+is deterministic from the lock, and `make check`, `make dist-pakrat` and
+`make dist-source` pass. Device requalification, including the performance
+measurement of the retrained profile, is pending, so no 2.1.1 pak is published.
 
 The published 2.0.0 source pin was DSperate v2.0.0 with three reviewed pak
 patches. Two clean builds reproduce its binary, and wrapper, profile, archive
@@ -59,8 +59,8 @@ make dist-source    # GPL corresponding source for the shipped binary
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
-This candidate builds without PGO; see `standalone/PROVENANCE.md` for the
-recorded decision and a later candidate's path to a GCC 12.3.0 profile.
+This candidate builds with a profile retrained for v2.1.1 with the pak's own
+GCC 12.3.0 toolchain; see `standalone/PROVENANCE.md`.
 
 Publish the corresponding-source archive beside the pak ZIP. It includes the
 patched upstream tree in `dsperate-src/`, plus the build scripts, notice-program
