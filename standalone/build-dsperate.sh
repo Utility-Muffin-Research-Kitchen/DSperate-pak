@@ -97,7 +97,9 @@ else
   if [ "$(git -C "$SRC_DIR" rev-parse -q --verify HEAD 2>/dev/null)" != "$SOURCE_COMMIT" ]; then
     say "fetching pinned commit $SOURCE_COMMIT"
     git -C "$SRC_DIR" fetch -q --depth 1 origin "$SOURCE_COMMIT"
-    git -C "$SRC_DIR" checkout -q --detach FETCH_HEAD
+    # -f: a cached tree still carries the previous pin's patches, and the reset
+    # below discards them anyway; a plain checkout would refuse to switch.
+    git -C "$SRC_DIR" checkout -q -f --detach FETCH_HEAD
   fi
   [ "$(git -C "$SRC_DIR" rev-parse HEAD)" = "$SOURCE_COMMIT" ] \
     || die "checked out $(git -C "$SRC_DIR" rev-parse HEAD), lock says $SOURCE_COMMIT"
