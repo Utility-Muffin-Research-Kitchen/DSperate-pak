@@ -24,10 +24,13 @@ clean clone with no sibling checkout.
 [DSperate 2.0.0](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.0.0)
 is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
 candidate updates the source pin to **DSperate v2.1.1** with four reviewed pak
-patches. It is host-verified only so far: two clean builds reproduce the
-profile-guided binary `47062e7d…`, the strict profile check passes, `--version`
-is deterministic from the lock, and `make check`, `make dist-pakrat` and
-`make dist-source` pass. Device requalification, including the performance
+patches, and its runtime manifest now says `pak_version` `2.1.1`. It is
+host-verified only so far: two clean builds reproduce the profile-guided binary
+`47062e7d…`, and so does a rebuild from the corresponding-source archive. The
+build runs with `DSPERATE_PGO_STRICT` and fails if a trained object loses its
+profile or a function no longer matches it. `--version` reports
+`v2.1.1 (baec965)` from both builds, and the pak ZIP and source archive are
+byte-for-byte reproducible. Device requalification, including the performance
 measurement of the retrained profile, is pending, so no 2.1.1 pak is published.
 
 The published 2.0.0 source pin was DSperate v2.0.0 with three reviewed pak
@@ -52,17 +55,27 @@ You need Docker, make, git and python3. Everything else is pinned.
 make standalone     # build the pinned DSperate binary (long; cached)
 make test-wrapper   # check the launch wrapper without building
 make validate       # check pak.json against the content-pak contract
-make check          # validate, test the wrapper, package, validate the package
+make check          # validate, run the host tests, package, validate the package
 make dist-pakrat    # build/dist/DSperate.mlp1.pak.zip
 make dist-source    # GPL corresponding source for the shipped binary
+make test-version   # --version from the git build and a rebuild from the source archive
+make test-archives  # build both archives twice and compare their bytes
 ```
+
+`make check` also runs `test-profile` (the MLP1 pad profile), `test-pgo` (the
+locked PGO profile and the strict build gate), `test-lock` (manifest, lock and
+patches agree), `test-docs` (this README and `PROVENANCE.md` quote the locked
+build) and `test-archive-cli` (the archive checks against the real binary, in
+the pinned AArch64 image).
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
 This candidate builds with a profile retrained for v2.1.1 with the pak's own
 GCC 12.3.0 toolchain; see `standalone/PROVENANCE.md`.
 
-Publish the corresponding-source archive beside the pak ZIP. It includes the
+Both archives are written inside the same pinned image with sorted entries,
+`SOURCE_DATE_EPOCH` timestamps, owner 0 and fixed modes, so anyone rebuilding
+gets the same bytes. Publish the corresponding-source archive beside the pak ZIP. It includes the
 patched upstream tree in `dsperate-src/`, plus the build scripts, notice-program
 source and package files. `make dist-source` checks that the archive contains
 the locked build inputs before accepting it.

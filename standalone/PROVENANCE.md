@@ -114,6 +114,7 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_CHEEVOS_VERSION` | `2.1.1` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 | `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
 | `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
+| `DSPERATE_PGO_STRICT` | `ON` | keeps GCC's missing-profile and coverage-mismatch warnings; the build counts them and fails (see below) |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
 (`1789871851`). `DSPERATE_LOCK_VERSION=v2.1.1` and
@@ -142,11 +143,32 @@ How the profile was produced (see `standalone/pgo/aarch64/MANIFEST`):
   directory hash does not match the lock, and CMake refuses one whose compiler
   or flags (the MANIFEST fingerprint) do not match the build.
 
-Verification: a `-DDSPERATE_PGO_STRICT=ON` build reports 0 objects without a
-profile outside the never-trained groups (the SDL frontend, rcheevos, the
-reference kernels, miniz) and 0 coverage mismatches. Two clean `FORCE=1` builds
-with the locked profile agree byte for byte.
-Device performance of this candidate must be re-measured before any claim.
+Verification is part of every build. The release build itself runs with
+`-DDSPERATE_PGO_STRICT=ON`, and `build-in-container.sh` counts the warnings the
+same way upstream's `tools/pgo_refresh.sh` does: it fails if any object outside
+the never-trained groups (the SDL frontend, rcheevos and the achievement code,
+the standalone tools, miniz, the reference kernels) has no profile, if any
+function's control flow no longer matches its profile, or if no strict warning
+appears at all. The current build reports 47 objects without a profile, all in
+those groups, and 0 mismatches. The strict flags are warning switches only; the
+binary is byte-identical to the non-strict build. `make test-pgo` checks,
+without a build or a device, that the profile directory, its MANIFEST and the
+build flags match the lock. Two clean `FORCE=1` builds with the locked profile
+agree byte for byte.
+Device performance of this candidate must be re-measured before any claim; no
+measurement of the retrained profile exists yet.
+
+## Archives
+
+`make dist-pakrat` and `make dist-source` write the pak ZIP and the
+corresponding-source tarball with `scripts/make-archive.py`, run inside the
+same pinned image so the Python and zlib doing the compression are fixed.
+Entries are sorted, every timestamp is `SOURCE_DATE_EPOCH`, owner and group are
+0 with no names, modes are 0755 or 0644, the ZIP has no extra fields and the
+gzip header has no name or timestamp. `make test-archives` builds both twice
+with every input's mtime and the umask changed in between and requires the
+same sha256. `make test-version` extracts the source archive, rebuilds from it
+with no git, and requires the locked binary and `DSperate v2.1.1 (baec965)`.
 
 ## Linkage
 
