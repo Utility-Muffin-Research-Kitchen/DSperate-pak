@@ -26,7 +26,7 @@ is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
 candidate updates the source pin to **DSperate v2.1.1** with five reviewed pak
 patches, the fifth being the Leaf RetroAchievements account adapter, and its
 runtime manifest now says `pak_version` `2.1.1`. It is host-verified only so
-far: two clean builds reproduce the profile-guided binary `0780d7dc…`, and so
+far: two clean builds reproduce the profile-guided binary `87de031c...`, and so
 does a rebuild from the corresponding-source archive. The
 build runs with `DSPERATE_PGO_STRICT` and fails if a trained object loses its
 profile or a function no longer matches it. `--version` reports

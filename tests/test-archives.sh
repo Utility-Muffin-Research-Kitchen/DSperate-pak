@@ -28,9 +28,10 @@ tar1="$(sha "$TAR")"
 
 # Disturb every input: a fresh package tree (package-mlp1 recopies it, so its
 # mtimes are new), new mtimes on every source input, and a looser umask. None
-# of it may reach the archives.
+# of it may reach the archives. Use a past date so a later Ninja build does not
+# continually regenerate its manifest against a future-dated toolchain file.
 find "$BUILD/dsperate-src" "$REPO_ROOT/standalone" "$REPO_ROOT/pak" "$REPO_ROOT/tests" \
-  -path '*/.git' -prune -o -type f -exec touch -t 203001010101 {} +
+  -path '*/.git' -prune -o -type f -exec touch -t 200001010101 {} +
 (umask 000 && make -s -C "$REPO_ROOT" BUILD="$BUILD" dist-pakrat >/dev/null)
 (umask 000 && make -s -C "$REPO_ROOT" BUILD="$BUILD" dist-source >/dev/null)
 zip2="$(sha "$ZIP")"

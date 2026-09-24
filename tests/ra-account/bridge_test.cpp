@@ -532,6 +532,19 @@ static void testSignOut() {
   check(!loadManagedToken(user, password) && !takePendingLogin(user, password),
         "sign-out: nothing authenticates");
 
+  // A later launch still receives the retained sign-out. Even if native
+  // achievements are on, the frontend must not enter its external/CFW path.
+  signedOut(2);
+  launch(dir);
+  check(isManaged() && !isTokenLoginAllowed(),
+        "repeated sign-out: native token fallback is blocked");
+  check(statusLine() == "signed-out" && managedAccount().empty(),
+        "repeated sign-out: the account page retains the signed-out state");
+  check(!loadManagedToken(user, password) && !takePendingLogin(user, password),
+        "repeated sign-out: no credentials are offered with native achievements on");
+  check(readFile(marker(dir)) == markerText("signed-out", 2, "") && takeNotices().empty(),
+        "repeated sign-out: no marker rewrite or error notice is needed");
+
   const std::string dir2 = freshDir();
   seedAccepted(dir2, "player-one", 1, "tok-1");
   signedOut(2);
@@ -543,6 +556,10 @@ static void testSignOut() {
   check(statusLine() == "sign-out-token-failed" && isSuppressed(),
         "sign-out, token removal fails: reported and suppressed");
   check(anyNoticeContains(takeNotices(), "Could not remove"), "sign-out, token removal fails: a notice is queued");
+  signedOut(2);
+  launch(dir2);
+  check(isManaged() && !isTokenLoginAllowed() && !loadManagedToken(user, password),
+        "repeated sign-out: an undeleted managed token cannot revive native login");
   configured("player-one", 3);
   launch(dir2);
   check(!loadManagedToken(user, password), "sign-out, token removal fails: the old token is never reused");
@@ -573,6 +590,46 @@ static void testLoginFailure() {
   check(readFile(marker(dir)) == markerText("pending", 1, "player-one"),
         "rejected login: the revision is not accepted");
   check(!takeTokenRetry(user, password), "rejected login: no retry loop");
+  const auto notices = takeNotices();
+  check(anyNoticeContains(notices, "sign-in failed") &&
+        anyNoticeContains(notices, "Invalid username/password"),
+        "rejected login: an account notice survives disabled achievement toasts");
+  check(notices.size() == 1 && noticesSecretFree(notices, ""),
+        "rejected login: one account notice, with no imported password");
+}
+
+static void testUnreadableMarker() {
+  for (int err : {EACCES, EIO, ENOTDIR}) {
+    for (bool malformedHandoff : {false, true}) {
+      const std::string dir = freshDir();
+      seedAccepted(dir, "player-one", 1, "tok-1");
+      const std::string before = readFile(marker(dir));
+      clearVars();
+      if (malformedHandoff) setenv("UMRK_RA_ACCOUNT_VERSION", "bad", 1);
+      inject("fopen", err);
+      launch(dir);
+      check(g_calls == 1, "unreadable marker: the read fault was exercised");
+      clearFault();
+      std::string user, password;
+      check(isManaged() && isSuppressed() && !isTokenLoginAllowed() &&
+            !loadManagedToken(user, password) && !takePendingLogin(user, password),
+            "unreadable marker: missing or malformed handoff never becomes native");
+      check(readFile(marker(dir)) == before && readFile(token(dir)) == "player-one\ntok-1\n",
+            "unreadable marker: durable credentials are preserved");
+      check(anyNoticeContains(takeNotices(), "unavailable"),
+            "unreadable marker: an account notice explains the suppression");
+    }
+  }
+}
+
+static void testMalformedSignOutWithoutMarker() {
+  signedOut(2);
+  unsetenv("UMRK_RA_ACCOUNT_REVISION");
+  const std::string dir = freshDir();
+  launch(dir);
+  check(!isManaged() && !isSuppressed() && !exists(marker(dir)),
+        "malformed sign-out without managed state: never interpreted as a sign-out");
+  check(!takeNotices().empty(), "malformed sign-out: a handoff notice is shown");
 }
 
 // G22: an unmanaged native sign-in is session-only, as upstream's is. Nothing
@@ -626,6 +683,8 @@ int main() {
   testCorruption();
   testSignOut();
   testSuppressed();
+  testUnreadableMarker();
+  testMalformedSignOutWithoutMarker();
   testLoginFailure();
   testUnmanagedSignInPersistsNothing();
   testTokenWriterRefusesBadInput();

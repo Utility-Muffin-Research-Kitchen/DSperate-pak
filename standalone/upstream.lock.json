@@ -74,7 +74,7 @@
     },
     {
       "file": "0005-dsperate-ra-account-adapter.patch",
-      "sha256": "3eed36f87a9ad85658575f63534a575e878a9826fd81e5b04e31a4ee7e265a23",
+      "sha256": "7328bde126c95467bac7989e5beb6ff31314d0ccafd8e1b954448c9b1ab79568",
       "note": "The standalone-ra-account-v1 consumer. Adds the shared contract classifier and marker (verbatim with the Flycast consumer and the leaf-contracts reference), the managed-account bridge with its own checked token writer (same-directory temporary, write, fsync, close, rename, each checked; the revision is accepted only after it), and the native login wiring (import, one password retry, sign-out). Captures and scrubs UMRK_RA_ACCOUNT_* at startup; an explicit cheevos.enabled = false or --no-cheevos wins over a managed account; bridge failures reach the native pop-up path even with toasts off; an unmanaged sign-in stays session-only as upstream. Never writes a password or token to a log or argv."
     }
   ],
@@ -91,7 +91,7 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "0780d7dc7028a35e8caed328bf783e91efa33c0932ad1f2fca5267f55068ea9c",
+    "sha256": "87de031c4484830e3aaea5a8f1671afc77a78345dc6312b73c7f99e43517fafc",
     "size_bytes": 4476456,
     "note": "Recorded after two clean FORCE=1 PGO builds agree on the v2.1.1 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },

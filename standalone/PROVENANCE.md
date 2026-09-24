@@ -234,7 +234,7 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `0780d7dc7028a35e8caed328bf783e91efa33c0932ad1f2fca5267f55068ea9c` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| sha256 | `87de031c4484830e3aaea5a8f1671afc77a78345dc6312b73c7f99e43517fafc` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
 | Size | 4,476,456 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
@@ -281,7 +281,7 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 The v2.0.0 release checks below are retained as history. The v2.1.1 candidate in
 this revision is host-verified only: the patched source builds with the retrained
-GCC 12.3.0 profile to `0780d7dc…`, two clean `FORCE=1` builds agree, the strict
+GCC 12.3.0 profile to `87de031c...`, two clean `FORCE=1` builds agree, the strict
 profile check passes, `--version` reports
 `v2.1.1 (baec965)` from the lock, and `make check`, `make dist-pakrat` and
 `make dist-source` pass (118 wrapper checks, 14 MLP1 profile checks, the
