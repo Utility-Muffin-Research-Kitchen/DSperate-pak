@@ -31,6 +31,7 @@
       "-DDSPERATE_WAYLAND=ON",
       "-DDSPERATE_CHEEVOS_VERSION=2.1.1",
       "-DDSPERATE_PGO=use",
+      "-DDSPERATE_PGO_STRICT=ON",
       "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ]
   },
