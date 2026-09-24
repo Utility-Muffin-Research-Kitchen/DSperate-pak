@@ -19,8 +19,6 @@
 #
 set -u
 
-ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
-
 # standalone-ra-account-v1. Jawaka exports this child-only account snapshot to
 # an authorized DSperate launch and to nothing else. Copy it into shell
 # variables and unset it before anything runs: every helper below (awk, tr,
@@ -39,6 +37,14 @@ umrk_ra_password="${UMRK_RA_ACCOUNT_PASSWORD-}"
 umrk_ra_revision="${UMRK_RA_ACCOUNT_REVISION-}"
 unset UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME \
     UMRK_RA_ACCOUNT_PASSWORD UMRK_RA_ACCOUNT_REVISION
+# RetroArch's per-launch credential pair has no business in a standalone
+# emulator's launch at all; the producer scrubs it. If an inherited one leaked
+# through anyway, no helper here may see it either. Only its presence is passed
+# on (as an empty value), so the emulator still refuses the handoff as the
+# contract requires, without ever receiving that password.
+umrk_ra_stale_username="${JAWAKA_CHEEVOS_USERNAME+1}"
+umrk_ra_stale_password="${JAWAKA_CHEEVOS_PASSWORD+1}"
+unset JAWAKA_CHEEVOS_USERNAME JAWAKA_CHEEVOS_PASSWORD
 
 restore_ra_account_snapshot() {
     [ -n "$umrk_ra_set_version" ] && export UMRK_RA_ACCOUNT_VERSION="$umrk_ra_version"
@@ -46,8 +52,13 @@ restore_ra_account_snapshot() {
     [ -n "$umrk_ra_set_username" ] && export UMRK_RA_ACCOUNT_USERNAME="$umrk_ra_username"
     [ -n "$umrk_ra_set_password" ] && export UMRK_RA_ACCOUNT_PASSWORD="$umrk_ra_password"
     [ -n "$umrk_ra_set_revision" ] && export UMRK_RA_ACCOUNT_REVISION="$umrk_ra_revision"
+    [ -n "$umrk_ra_stale_username" ] && export JAWAKA_CHEEVOS_USERNAME=
+    [ -n "$umrk_ra_stale_password" ] && export JAWAKA_CHEEVOS_PASSWORD=
     return 0
 }
+
+# Resolved only now: dirname is a helper process too.
+ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 # --- runtime environment -----------------------------------------------------
 # Source the launcher's exported environment when it is present, without
@@ -62,7 +73,8 @@ fi
 # environment. A value that appears here came from env.sh, which is exactly
 # where credentials must not be, so drop it instead of passing it on.
 unset UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME \
-    UMRK_RA_ACCOUNT_PASSWORD UMRK_RA_ACCOUNT_REVISION
+    UMRK_RA_ACCOUNT_PASSWORD UMRK_RA_ACCOUNT_REVISION \
+    JAWAKA_CHEEVOS_USERNAME JAWAKA_CHEEVOS_PASSWORD
 
 : "${PLATFORM:=mlp1}"
 : "${SDCARD_PATH:=/mnt/sdcard}"
