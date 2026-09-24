@@ -23,15 +23,19 @@ clean clone with no sibling checkout.
 
 [DSperate 2.0.0](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.0.0)
 is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
-candidate updates the source pin to **DSperate v2.1.1** with four reviewed pak
-patches, and its runtime manifest now says `pak_version` `2.1.1`. It is
-host-verified only so far: two clean builds reproduce the profile-guided binary
-`47062e7d…`, and so does a rebuild from the corresponding-source archive. The
+candidate updates the source pin to **DSperate v2.1.1** with five reviewed pak
+patches, the fifth being the Leaf RetroAchievements account adapter, and its
+runtime manifest now says `pak_version` `2.1.1`. It is host-verified only so
+far: two clean builds reproduce the profile-guided binary `0780d7dc…`, and so
+does a rebuild from the corresponding-source archive. The
 build runs with `DSPERATE_PGO_STRICT` and fails if a trained object loses its
 profile or a function no longer matches it. `--version` reports
 `v2.1.1 (baec965)` from both builds, and the pak ZIP and source archive are
-byte-for-byte reproducible. Device requalification, including the performance
-measurement of the retrained profile, is pending, so no 2.1.1 pak is published.
+byte-for-byte reproducible. The account adapter replays the shared
+`standalone-ra-account-v1` fixtures and its fault tests on every check. Device
+requalification, including the performance measurement of the retrained
+profile and a native sign-in with this exact build, is pending, so no 2.1.1 pak
+is published.
 
 The published 2.0.0 source pin was DSperate v2.0.0 with three reviewed pak
 patches. Two clean builds reproduce its binary, and wrapper, profile, archive
@@ -65,8 +69,16 @@ make test-archives  # build both archives twice and compare their bytes
 `make check` also runs `test-profile` (the MLP1 pad profile), `test-pgo` (the
 locked PGO profile and the strict build gate), `test-lock` (manifest, lock and
 patches agree), `test-docs` (this README and `PROVENANCE.md` quote the locked
-build) and `test-archive-cli` (the archive checks against the real binary, in
-the pinned AArch64 image).
+build), `test-ra-account` (the account adapter, below), `test-validate-pak`
+(the capability record rule) and `test-archive-cli` (the archive checks
+against the real binary, in the pinned AArch64 image).
+
+`make test-ra-account` needs only a host C++ compiler. It takes the adapter's
+files out of patch 0005 and replays the `standalone-ra-account-v1` fixtures from
+the public leaf-contracts repository, at the commit and sha256 pinned in
+`tests/ra-account/contract.lock.json`, through the adapter's own classifier.
+It then drives the adapter through interrupted token and marker writes at
+every step, a full card, damaged files and a missing account directory.
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
@@ -101,9 +113,25 @@ session-only**: it ends achievements for that session, and the next launch
 applies Leaf's saved account again. To sign out for good, clear the account in
 Leaf's Accounts; after that DSperate receives no credentials either.
 
+To keep achievements off for one game, set `enabled = false` under
+`[cheevos]` in that game's INI (or in your global `dsperate.ini` for every
+game). That choice wins over the Leaf account: DSperate does not sign in for
+that game and leaves the stored account alone.
+
+If the account cannot be used or saved, for example because the card is full,
+DSperate tells you in a RetroAchievements pop-up, even when you have turned
+achievement notifications off, and keeps playing without achievements. The
+next launch tries again; it never falls back to an older account.
+
 DSperate keeps its own sign-in token in
 `$USERDATA_PATH/dsperate/retroachievements/`, shared across games and cards;
-the account itself is never stored in a save or a state.
+the account itself is never stored in a save or a state. It saves the token
+only after RetroAchievements accepts the account, and only then records that
+account as current.
+
+A launch that Leaf does not manage, such as a DSperate build started by hand,
+behaves as upstream DSperate: a sign-in from the in-game menu lasts until you
+quit.
 
 ## Where your data lives
 

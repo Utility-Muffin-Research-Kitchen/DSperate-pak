@@ -11,11 +11,11 @@ Everything here is measured from the build, not from memory.
 | Tag | `v2.1.1` |
 | Commit | `baec96501802bb04203cac07b420c67eff8054b8` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
-| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch` and `patches/0004-deterministic-version.patch` (sha256-locked; see below) |
+| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch` and `patches/0005-dsperate-ra-account-adapter.patch` (sha256-locked; see below) |
 
 ## Patches
 
-The four patches are locked by sha256 in `upstream.lock.json`; the build
+The five patches are locked by sha256 in `upstream.lock.json`; the build
 applies them in order and refuses a patch whose hash differs.
 
 Reviewed against [upstream v2.1.1](https://github.com/beebono/DSperate/releases/tag/v2.1.1)
@@ -27,6 +27,7 @@ on 2026-09-21:
 | 0002 save durability | Keep. Re-anchored onto v2.1.1's larger SDL frontend; checked writes and firmware flush/close are unchanged. |
 | 0003 lid/resume | Keep. v2.1.1's lid implementation is unchanged and still fabricates a close on a device with no switch. |
 | 0004 deterministic `--version` | New. Prefers the lock's tag and commit over git so a source archive and a patched checkout report the same identity. |
+| 0005 Leaf account adapter | New. The `standalone-ra-account-v1` consumer; upstream has no equivalent. |
 
 `standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
 archive policy.
@@ -57,6 +58,43 @@ archive without git says `unknown` and a patched checkout says `<hash>-dirty`.
 The patch prefers `DSPERATE_LOCK_VERSION` and `DSPERATE_LOCK_COMMIT`, which
 `build-in-container.sh` exports from the lock, and leaves ordinary git
 development unchanged.
+
+`standalone/patches/0005-dsperate-ra-account-adapter.patch` makes DSperate use
+the RetroAchievements account saved in Leaf. It adds three files under
+`src/cheevos/` and small hooks in the achievement client and the SDL frontend:
+
+- `ra_account_contract.cpp` and `ra_account.h`: the contract classifier, the
+  revision marker (`.umrk-ra-account`) and the transition table, the same logic
+  as the Flycast consumer and the leaf-contracts reference.
+  `make test-ra-account` replays the pinned leaf-contracts fixtures through
+  this classifier.
+- `ra_account_bridge.cpp`: captures `UMRK_RA_ACCOUNT_*` (and a leaked
+  `JAWAKA_CHEEVOS_*` pair) into private memory and unsets them as the first
+  thing the frontend does. It picks the transition, writes the marker as
+  pending before a login, and hands the password to the native rcheevos login
+  once. A verified token goes through the adapter's own checked writer: a
+  0600 temporary in the same directory, then write, `fsync`, close and rename,
+  each checked. Only after that does the marker become accepted. Any failure
+  leaves the previous files in place and keeps the revision pending.
+- An explicit `cheevos.enabled = false` (global or per-game INI) or
+  `--no-cheevos` is decided before the handoff is consumed and wins over the
+  managed account. The handoff is still captured and scrubbed, but nothing
+  signs in and neither the marker nor the token is touched.
+- Bridge failures are queued as notices that the achievement client drains
+  into its own pop-up queue, the path upstream's sign-in failure uses. The
+  frontend shows them even with `cheevos.toasts` off.
+- Unmanaged launches keep upstream behavior: a menu sign-in lasts for the
+  session and is not written anywhere. Upstream reads
+  `<Config::dir()>/cheevos.token` but never writes one, and the Leaf wrapper
+  gives every game its own `XDG_CONFIG_HOME`, so persisting there would
+  scatter tokens across per-game directories.
+- The account page says `MANAGED BY LEAF`, offers no manual sign-in for a
+  managed account, and keeps its sign-out session-only.
+
+The wrapper passes the managed directory as `--managed-account-dir`
+(`$USERDATA_PATH/dsperate/retroachievements`). It copies and unsets the
+snapshot before any helper runs and restores it only for the emulator's
+`exec`. It passes a leaked RetroArch pair on by presence only, never by value.
 
 The cache-root and single-ROM policies default off. Unsafe archive entry
 names are rejected regardless of those flags.
@@ -128,7 +166,11 @@ GCC 12.3.0) and these same flags, against the patched v2.1.1 source. Upstream
 v2.1.1 ships profiles for GCC 10.5 and 12.4.0 only; CMake's fingerprint check
 refuses those, and a `.gcda` is bound to the compiler that wrote it, so they
 cannot be used here. The profile was retrained for the port rather than carried
-from v2.0.0, whose profile is tied to the v2.0.0 source.
+from v2.0.0, whose profile is tied to the v2.0.0 source. The profile in this revision
+was retrained over the tree with patch 0005 applied (MANIFEST date
+2026-09-21T20:20Z). The adapter's code sits in the never-trained achievement
+and SDL frontend groups, so a later change to it leaves every trained object's
+profile valid. The strict gate checks that on every build.
 
 How the profile was produced (see `standalone/pgo/aarch64/MANIFEST`):
 
@@ -149,8 +191,8 @@ same way upstream's `tools/pgo_refresh.sh` does: it fails if any object outside
 the never-trained groups (the SDL frontend, rcheevos and the achievement code,
 the standalone tools, miniz, the reference kernels) has no profile, if any
 function's control flow no longer matches its profile, or if no strict warning
-appears at all. The current build reports 47 objects without a profile, all in
-those groups, and 0 mismatches. The strict flags are warning switches only; the
+appears at all. The current build reports 49 objects without a profile, all in
+those groups (the adapter's two new files among them), and 0 mismatches. The strict flags are warning switches only; the
 binary is byte-identical to the non-strict build. `make test-pgo` checks,
 without a build or a device, that the profile directory, its MANIFEST and the
 build flags match the lock. Two clean `FORCE=1` builds with the locked profile
@@ -192,8 +234,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `47062e7d368ef938921edb8145cb37ca008d19d95fda340e426942d812888d23` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,447,768 bytes | 14,224 bytes |
+| sha256 | `0780d7dc7028a35e8caed328bf783e91efa33c0932ad1f2fca5267f55068ea9c` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,476,456 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
@@ -239,12 +281,14 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 The v2.0.0 release checks below are retained as history. The v2.1.1 candidate in
 this revision is host-verified only: the patched source builds with the retrained
-GCC 12.3.0 profile to `47062e7d…`, two clean `FORCE=1` builds agree, the strict
+GCC 12.3.0 profile to `0780d7dc…`, two clean `FORCE=1` builds agree, the strict
 profile check passes, `--version` reports
 `v2.1.1 (baec965)` from the lock, and `make check`, `make dist-pakrat` and
-`make dist-source` pass (82 wrapper checks, 14 MLP1 profile checks, packaged-tree
-validation). Device requalification of v2.1.1, including the performance the new
-profile must re-measure, is pending.
+`make dist-source` pass (118 wrapper checks, 14 MLP1 profile checks, the
+27 pinned account fixtures, the account state and bridge fault tests, and
+packaged-tree validation). Device requalification of v2.1.1, including the
+performance the new profile must re-measure and a native sign-in with this
+exact build, is pending.
 
 Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
 runtime library allowlist are unchanged. The larger emulator contains the new
