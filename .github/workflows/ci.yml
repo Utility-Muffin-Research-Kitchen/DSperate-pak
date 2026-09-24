@@ -16,7 +16,7 @@ env:
   # Pin the contract, not a branch. A moving contract that silently changes what
   # "valid" means is the thing this pin exists to prevent; bumping it is a
   # reviewed commit here.
-  CONTRACT_REF: 699ce2dbced68c8f2529c3a5ffc51dda106e2df7
+  CONTRACT_REF: f25fd2a18fe02bee72141a8a8f220aad28551e29
 
 jobs:
   validate:
@@ -36,6 +36,12 @@ jobs:
 
       - name: Check wrapper, MLP1 pad profile, PGO lock, manifest/lock and docs
         run: make test-wrapper test-profile test-pgo test-lock test-docs
+
+      - name: Replay the pinned standalone-ra-account-v1 fixtures and bridge fault tests
+        run: make test-ra-account CONTRACT_DIR="$PWD/.contract"
+
+      - name: The validator's ra-account-v1 record rule
+        run: make test-validate-pak CONTRACT_DIR="$PWD/.contract"
 
       - name: Refuse a launch.sh
         run: |

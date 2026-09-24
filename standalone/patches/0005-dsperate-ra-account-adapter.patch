@@ -12,7 +12,7 @@ index 9a799c1..c031100 100644
    ${RC_API_SOURCES}
    ${RC_RUNTIME_SOURCES}
 diff --git a/src/cheevos/cheevos_client.cpp b/src/cheevos/cheevos_client.cpp
-index 2f68354..a7e4963 100644
+index 2f68354..852fce4 100644
 --- a/src/cheevos/cheevos_client.cpp
 +++ b/src/cheevos/cheevos_client.cpp
 @@ -15,6 +15,7 @@
@@ -23,7 +23,23 @@ index 2f68354..a7e4963 100644
  #include "rc_client.h"
  
  namespace ds::cheevos {
-@@ -486,6 +487,8 @@ void load_done(int result, const char* error_message, rc_client_t* c, void* user
+@@ -270,6 +271,15 @@ void Client::post(Message::Kind kind, std::string text, std::string detail, u32
+ }
+ 
+ std::vector<Message> Client::take_messages() {
++  // UMRK: the Leaf account bridge's problems (a marker or token write that
++  // failed, an unusable handoff) come out through this same queue, as the
++  // native sign-in failure does, so they reach the same pop-up.
++  for (ra_account::Notice& n : ra_account::takeNotices()) {
++    Message m{Message::Kind::Problem, std::move(n.text), std::move(n.detail), 0};
++    m.account = true;
++    std::lock_guard<std::mutex> lk(mu_);
++    messages_.push_back(std::move(m));
++  }
+   std::lock_guard<std::mutex> lk(mu_);
+   std::vector<Message> out;
+   out.swap(messages_);
+@@ -486,6 +496,8 @@ void load_done(int result, const char* error_message, rc_client_t* c, void* user
  
  void Client::sign_in(const std::string& username, const std::string& password) {
    if (!client_) return;
@@ -32,7 +48,7 @@ index 2f68354..a7e4963 100644
    state_ = State::SigningIn;
    rc_client_begin_login_with_password(static_cast<rc_client_t*>(client_), username.c_str(),
                                        password.c_str(), &login_done, nullptr);
-@@ -493,6 +496,8 @@ void Client::sign_in(const std::string& username, const std::string& password) {
+@@ -493,6 +505,8 @@ void Client::sign_in(const std::string& username, const std::string& password) {
  
  void Client::sign_in_with_token(const std::string& username, const std::string& token) {
    if (!client_) return;
@@ -41,14 +57,14 @@ index 2f68354..a7e4963 100644
    state_ = State::SigningIn;
    rc_client_begin_login_with_token(static_cast<rc_client_t*>(client_), username.c_str(),
                                     token.c_str(), &login_done, nullptr);
-@@ -557,12 +562,30 @@ u32 Client::game_id() const {
+@@ -557,12 +571,30 @@ u32 Client::game_id() const {
  
  void Client::on_signed_in(const std::string& display_name) {
    state_ = State::SignedIn;
-+  // UMRK: a verified sign-in is persisted here -- the managed token and its
-+  // accepted marker for an imported Leaf account, or DSperate's own token for
-+  // a manual sign-in, which upstream never saved. A failure is reported and
-+  // does not undo the session.
++  // UMRK: a verified managed sign-in is persisted here: a checked token write,
++  // then the accepted marker. A failure is reported through the pop-up queue
++  // and does not undo the session. An unmanaged sign-in stays session-only,
++  // as upstream's is.
 +  ra_account::commitLogin(username(), token());
    post(Message::Kind::Info, "Signed in to RetroAchievements",
         display_name.empty() ? std::string{} : display_name);
@@ -73,10 +89,21 @@ index 2f68354..a7e4963 100644
    post(Message::Kind::Problem, "RetroAchievements sign-in failed", why);
  }
 diff --git a/src/cheevos/cheevos_client.h b/src/cheevos/cheevos_client.h
-index 5248e80..c92291f 100644
+index 5248e80..adf8ff0 100644
 --- a/src/cheevos/cheevos_client.h
 +++ b/src/cheevos/cheevos_client.h
-@@ -209,6 +209,13 @@ private:
+@@ -51,6 +51,10 @@ struct Message {
+   std::string detail;   // may be empty
+   u32 points = 0;       // an unlock's value; 0 for everything else, and for
+                         // the 0-point achievements RetroAchievements has
++  // UMRK: an account problem from the Leaf account bridge. Shown even when
++  // ordinary achievement toasts are turned off, because the player has no
++  // other way to learn their account needs attention.
++  bool account = false;
+ };
+ 
+ // Where the session currently is. The frontend needs this to decide what to
+@@ -209,6 +213,13 @@ private:
    std::string hash_;                 // the identity of the dump in the slot
    std::string unavailable_;
  
@@ -92,10 +119,10 @@ index 5248e80..c92291f 100644
    std::condition_variable cv_;
 diff --git a/src/cheevos/ra_account.h b/src/cheevos/ra_account.h
 new file mode 100644
-index 0000000..8d0ba8b
+index 0000000..31da0c8
 --- /dev/null
 +++ b/src/cheevos/ra_account.h
-@@ -0,0 +1,213 @@
+@@ -0,0 +1,260 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +// DSperate - Nintendo DS emulator. Copyright (C) 2026 DSperate contributors.
 +//
@@ -108,11 +135,12 @@ index 0000000..8d0ba8b
 +// marker in the managed account directory, and the transition the two of them
 +// select.
 +//
-+// Everything declared here (except the import()/commitLogin() entry points at
-+// the bottom) is deliberately free of DSperate dependencies so the host fixture
-+// test can compile the classifier on its own and replay the shared
-+// leaf-contracts fixtures byte for byte. The DSperate-facing glue (rc_client
-+// login, native toasts) lives in ra_account_bridge.cpp.
++// Everything declared here is deliberately free of DSperate dependencies: the
++// host tests compile ra_account_contract.cpp and ra_account_bridge.cpp on their
++// own, replay the shared leaf-contracts fixtures byte for byte, and drive the
++// bridge through interrupted writes. The DSperate-facing glue (rc_client login,
++// the achievement client's pop-ups, the menu) calls in from cheevos_client.cpp
++// and the SDL frontend.
 +#pragma once
 +
 +#include <map>
@@ -259,24 +287,37 @@ index 0000000..8d0ba8b
 +                bool persistedTokenPresent);
 +
 +// ---------------------------------------------------------------------------
-+// DSperate-facing entry points (ra_account_bridge.cpp)
++// Bridge (ra_account_bridge.cpp)
 +// ---------------------------------------------------------------------------
++
++// Copy the handoff into private memory and scrub it from the process
++// environment. Called as the first thing the frontend does, before any thread,
++// helper or log line exists; import() calls it too, so a caller that forgets
++// still never leaves the password in the environment. Idempotent.
++void captureEnv();
 +
 +// The non-secret managed account directory the wrapper resolved and passed
 +// (--managed-account-dir). Empty means the launch is not managed; the
 +// classifier then sees only what the environment carries.
 +void setManagedDir(const std::string &dir);
 +const std::string &managedDir();
-+// The directory DSperate's own sign-in persists to when the launch is not
-+// managed (Config::dir()). Upstream never wires save_credentials(), so a
-+// native sign-in would otherwise be forgotten; the adapter fixes that here.
-+void setNativeDir(const std::string &dir);
 +
-+// Consume the handoff: classify, scrub the environment, pick the transition and
++// Consume the handoff: classify the captured snapshot, pick the transition and
 +// perform its durable part (write pending, import the credentials, or clear for
 +// a sign-out). Called once before the achievement client starts. Never blocks
 +// on the network.
-+void import();
++//
++// `achievementsOff` is an explicit per-game or per-launch "achievements off"
++// (cheevos.enabled = false in a config file, or --no-cheevos). It wins over a
++// managed account: the snapshot is still captured, scrubbed and forgotten, but
++// nothing authenticates and nothing on disk -- marker or token -- is touched.
++void import(bool achievementsOff);
++
++// Whether the achievement client runs at all. An explicit setting wins either
++// way. Without one, a managed account turns achievements on -- configured,
++// suppressed or signed out, so the account page can say why -- and an
++// unmanaged launch keeps upstream's default of off. Call after import().
++bool achievementsOn(bool settingPresent, bool settingOn);
 +
 +// One-shot: hand the imported credentials to the native password login. The
 +// bridge forgets the password as it answers.
@@ -287,15 +328,30 @@ index 0000000..8d0ba8b
 +// False when a stored token must not be used this session (a suppressed
 +// handoff, a sign-out, or an import whose login has not succeeded yet).
 +bool isTokenLoginAllowed();
-+// Persist a verified token and accept its revision. Managed launches write the
-+// managed token and the accepted marker; an unmanaged login writes DSperate's
-+// own token so a native sign-in survives the launch. Returns false when the
-+// token could not be saved, in which case nothing was accepted and the failure
-+// has already been reported.
++// The managed account's stored token, when marker, snapshot and token file
++// agreed at import(). False, with nothing filled in, otherwise.
++bool loadManagedToken(std::string &username, std::string &token);
++// Persist a verified managed token and only then accept its revision: a checked
++// token write (same-directory temporary, write, flush, fsync, close, rename),
++// then the accepted marker. Returns false when the token could not be saved;
++// the marker then stays pending, so the next launch imports again, and the
++// failure is reported. An unmanaged sign-in is not persisted: upstream keeps it
++// for the session only, and so does this adapter.
 +bool commitLogin(const std::string &username, const std::string &token);
 +// Report a failed managed authentication: gameplay continues without
 +// achievements, and the previous account is never reused.
 +void reportLoginFailure(const std::string &reason, const std::string &detail);
++
++// A player-facing problem the bridge could not solve by itself (a failed write,
++// an unusable handoff). The achievement client drains these into its own
++// pop-up queue, the same one the native sign-in failure uses, and the frontend
++// shows them even with ordinary achievement toasts turned off. Never carries a
++// password or a token.
++struct Notice {
++  std::string text;
++  std::string detail;
++};
++std::vector<Notice> takeNotices();
 +
 +// True when this session is running a managed account.
 +bool isManaged();
@@ -308,13 +364,31 @@ index 0000000..8d0ba8b
 +// Managed username, or "" when unmanaged.
 +std::string managedAccount();
 +
++// The managed token file, cheevos.token in DSperate's own username/newline/
++// token format. Exposed for the host tests; the bridge is the only caller.
++enum class TokenStatus {
++  Absent,
++  Malformed,
++  Ok,
++};
++TokenStatus readTokenFile(const std::string &dir, std::string &username, std::string &token);
++bool writeTokenFile(const std::string &dir, const std::string &username,
++                    const std::string &token, std::string &error);
++// Absent already counts as removed.
++bool removeTokenFile(const std::string &dir, std::string &error);
++
++#ifdef DS_RA_ACCOUNT_TESTING
++// Host tests only: forget everything the bridge holds, as a new process would.
++void resetForTesting();
++#endif
++
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/cheevos/ra_account_bridge.cpp b/src/cheevos/ra_account_bridge.cpp
 new file mode 100644
-index 0000000..a508bcf
+index 0000000..b3cd557
 --- /dev/null
 +++ b/src/cheevos/ra_account_bridge.cpp
-@@ -0,0 +1,272 @@
+@@ -0,0 +1,489 @@
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +// DSperate - Nintendo DS emulator. Copyright (C) 2026 DSperate contributors.
 +//
@@ -336,19 +410,27 @@ index 0000000..a508bcf
 +// A crash anywhere in between leaves a pending marker, which is never proof of
 +// a reusable token: the next launch simply imports again. Nothing here writes a
 +// password or token to a log, to argv or to the marker.
++//
++// No DSperate headers: the host tests compile this file with the contract and
++// replay interrupted writes against it. The achievement client pulls the
++// bridge's notices into its own pop-up queue (cheevos_client.cpp).
 +#include "ra_account.h"
 +
++#include <cerrno>
 +#include <cstdio>
 +#include <cstring>
 +#include <string>
 +
-+#include "cheevos/cheevos_client.h"
++#include <fcntl.h>
++#include <unistd.h>
 +
 +namespace ds::cheevos::ra_account {
 +
 +namespace {
 +
 +struct Bridge {
++  bool captured = false;
++  std::map<std::string, std::string> env;
 +  bool imported = false;
 +  bool managed = false;
 +  bool suppressed = false;
@@ -357,12 +439,13 @@ index 0000000..a508bcf
 +  // One token-rejection retry, answered exactly once. Never a loop.
 +  bool tokenRetryAvailable = false;
 +  bool tokenLoginAllowed = true;
++  bool tokenReuse = false;
 +  std::string account;
 +  std::string password;
 +  long long revision = 0;
 +  std::string managed_dir;
-+  std::string native_dir;
 +  std::string status;
++  std::vector<Notice> notices;
 +};
 +
 +Bridge &bridge() {
@@ -377,15 +460,24 @@ index 0000000..a508bcf
 +  secret.shrink_to_fit();
 +}
 +
++void wipeEnv(std::map<std::string, std::string> &env) {
++  for (auto &entry : env) wipe(entry.second);
++  env.clear();
++}
++
 +std::string markerPath(Bridge &b) { return b.managed_dir + "/" + MarkerFileName; }
++std::string tokenPath(const std::string &dir) { return dir + "/" + TokenFileName; }
 +
 +void setStatus(Bridge &b, const std::string &status) { b.status = status; }
 +
-+// The native surfaces. DSperate's toasts come from the achievement client's
-+// message queue, but the account page in the pause menu reads statusLine(), so
-+// a status is always visible even with toasts off.
-+void report(Bridge &, const std::string &text) {
-+  std::fprintf(stderr, "cheevos: %s\n", text.c_str());
++// Every player-facing account problem goes two ways: the log, and the native
++// pop-up queue the achievement client drains (takeNotices), which is where
++// upstream's own sign-in failure appears. The account page's status line reads
++// statusLine() as well.
++void report(Bridge &b, const std::string &text, const std::string &detail = std::string()) {
++  std::fprintf(stderr, "cheevos: %s%s%s\n", text.c_str(), detail.empty() ? "" : ": ",
++               detail.c_str());
++  b.notices.push_back(Notice{text, detail});
 +}
 +
 +bool writeMarkerFile(Bridge &b, Transition transition, long long revision,
@@ -397,37 +489,186 @@ index 0000000..a508bcf
 +  return writeMarker(markerPath(b), marker);
 +}
 +
++// write(2) until everything is out: a short write is not an error by itself,
++// but a full card eventually answers -1/ENOSPC, which is.
++bool writeAll(int fd, const std::string &data) {
++  size_t done = 0;
++  while (done < data.size()) {
++    const ssize_t n = ::write(fd, data.data() + done, data.size() - done);
++    if (n < 0) {
++      if (errno == EINTR) continue;
++      return false;
++    }
++    if (n == 0) {
++      errno = EIO;
++      return false;
++    }
++    done += static_cast<size_t>(n);
++  }
++  return true;
++}
++
++std::string errorText(const char *step, int err) {
++  return std::string(step) + ": " + std::strerror(err);
++}
++
 +} // namespace
++
++// ---------------------------------------------------------------------------
++// Token file
++
++TokenStatus readTokenFile(const std::string &dir, std::string &username, std::string &token) {
++  username.clear();
++  token.clear();
++  FILE *f = std::fopen(tokenPath(dir).c_str(), "rb");
++  if (f == nullptr) return errno == ENOENT ? TokenStatus::Absent : TokenStatus::Malformed;
++  std::string content;
++  char buffer[512];
++  size_t n;
++  bool tooLarge = false;
++  while ((n = std::fread(buffer, 1, sizeof buffer, f)) > 0) {
++    content.append(buffer, n);
++    if (content.size() > 4096) {
++      tooLarge = true;
++      break;
++    }
++  }
++  const bool failed = std::ferror(f) != 0;
++  std::fclose(f);
++  if (failed || tooLarge) {
++    wipe(content);
++    return TokenStatus::Malformed;
++  }
++  // DSperate's own format (cheevos_client.cpp load_credentials): the username
++  // on the first line, the token on the second.
++  std::string fields[2];
++  size_t offset = 0;
++  for (int i = 0; i < 2 && offset < content.size(); ++i) {
++    const size_t end = content.find('\n', offset);
++    fields[i] = content.substr(offset, end == std::string::npos ? std::string::npos : end - offset);
++    offset = end == std::string::npos ? content.size() : end + 1;
++    while (!fields[i].empty() && fields[i].back() == '\r') fields[i].pop_back();
++  }
++  wipe(content);
++  if (fields[0].empty() || fields[1].empty()) {
++    wipe(fields[1]);
++    return TokenStatus::Malformed;
++  }
++  username = fields[0];
++  token = fields[1];
++  wipe(fields[1]);
++  return TokenStatus::Ok;
++}
++
++bool writeTokenFile(const std::string &dir, const std::string &username,
++                    const std::string &token, std::string &error) {
++  error.clear();
++  if (username.empty() || token.empty()) {
++    error = "nothing to save";
++    return false;
++  }
++  if (username.find_first_of("\r\n") != std::string::npos ||
++      token.find_first_of("\r\n") != std::string::npos) {
++    error = "credentials contain a line break";
++    return false;
++  }
++  // Same directory, so the rename cannot cross a filesystem, and created 0600
++  // from the start. Every step is checked; a failure anywhere removes the
++  // temporary and leaves the previous cheevos.token exactly as it was.
++  const std::string path = tokenPath(dir);
++  const std::string tmp = path + ".tmp";
++  ::unlink(tmp.c_str());
++  const int fd = ::open(tmp.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
++  if (fd < 0) {
++    error = errorText("open", errno);
++    return false;
++  }
++  std::string body = username + "\n" + token + "\n";
++  const char *failed = nullptr;
++  int err = 0;
++  if (!writeAll(fd, body)) {
++    failed = "write";
++    err = errno;
++  } else if (::fsync(fd) != 0) {
++    failed = "fsync";
++    err = errno;
++  }
++  wipe(body);
++  if (::close(fd) != 0 && failed == nullptr) {
++    failed = "close";
++    err = errno;
++  }
++  if (failed == nullptr && std::rename(tmp.c_str(), path.c_str()) != 0) {
++    failed = "rename";
++    err = errno;
++  }
++  if (failed != nullptr) {
++    ::unlink(tmp.c_str());
++    error = errorText(failed, err);
++    return false;
++  }
++  return true;
++}
++
++bool removeTokenFile(const std::string &dir, std::string &error) {
++  error.clear();
++  if (::unlink(tokenPath(dir).c_str()) == 0 || errno == ENOENT) return true;
++  error = errorText("unlink", errno);
++  return false;
++}
++
++// ---------------------------------------------------------------------------
++// Handoff
++
++void captureEnv() {
++  Bridge &b = bridge();
++  if (b.captured) return;
++  b.captured = true;
++  // Copy and scrub first, whatever the verdict turns out to be: nothing this
++  // process spawns afterwards can read the password out of its environment.
++  b.env = collectEnv();
++  clearEnv();
++}
 +
 +void setManagedDir(const std::string &dir) { bridge().managed_dir = dir; }
 +const std::string &managedDir() { return bridge().managed_dir; }
-+void setNativeDir(const std::string &dir) { bridge().native_dir = dir; }
 +
-+void import() {
++void import(bool achievementsOff) {
 +  Bridge &b = bridge();
 +  if (b.imported) return;
 +  b.imported = true;
++  captureEnv();
 +
-+  // Copy and scrub first, whatever the verdict turns out to be: nothing this
-+  // process spawns afterwards can read the password out of its environment.
-+  const std::map<std::string, std::string> env = collectEnv();
-+  clearEnv();
-+
-+  const Snapshot snapshot = classify(env);
++  Snapshot snapshot = classify(b.env);
++  wipeEnv(b.env);
 +  if (snapshot.hasReason("stale-retroarch-credentials"))
-+    report(b, "RetroArch credential variables leaked into this launch");
++    std::fprintf(stderr, "cheevos: RetroArch credential variables leaked into this launch\n");
++
++  if (achievementsOff) {
++    // An explicit "achievements off" wins over the managed account. The
++    // snapshot was captured and scrubbed above and is forgotten here; no login
++    // runs, and neither the marker nor the token is read or written, so the
++    // next launch without the switch picks up exactly where this one found it.
++    wipe(snapshot.password);
++    if (snapshot.handoff != Handoff::None)
++      std::fprintf(stderr, "cheevos: achievements are off for this game; the Leaf account is not used\n");
++    return;
++  }
 +
 +  Marker marker;
 +  MarkerStatus markerStatus = MarkerStatus::Absent;
-+  Credentials persisted;
++  std::string persistedUser;
++  std::string persistedToken;
++  TokenStatus tokenStatus = TokenStatus::Absent;
 +  if (!b.managed_dir.empty()) {
 +    markerStatus = readMarker(markerPath(b), marker);
-+    std::string err;
-+    if (!load_credentials(b.managed_dir, persisted, err) && !err.empty())
-+      std::fprintf(stderr, "cheevos: managed credentials: %s\n", err.c_str());
++    tokenStatus = readTokenFile(b.managed_dir, persistedUser, persistedToken);
++    wipe(persistedToken);
++    if (tokenStatus == TokenStatus::Malformed)
++      std::fprintf(stderr, "cheevos: the managed token file is unreadable or incomplete\n");
 +  }
 +  const Decision decision =
-+      decide(snapshot, markerStatus, marker, persisted.username, !persisted.empty());
++      decide(snapshot, markerStatus, marker, persistedUser, tokenStatus == TokenStatus::Ok);
 +
 +  switch (decision.action) {
 +  case Action::Unmanaged:
@@ -436,7 +677,7 @@ index 0000000..a508bcf
 +  case Action::Idle:
 +    if (snapshot.handoff == Handoff::Malformed) {
 +      setStatus(b, decision.reason);
-+      report(b, "the Leaf account handoff was not usable");
++      report(b, "The Leaf account handoff was not usable", decision.reason);
 +    }
 +    return;
 +
@@ -447,35 +688,51 @@ index 0000000..a508bcf
 +    b.suppressed = true;
 +    b.tokenLoginAllowed = false;
 +    setStatus(b, decision.reason);
-+    report(b, "the Leaf account is unavailable this session");
++    report(b, "The Leaf account is unavailable this session", decision.reason);
 +    return;
 +
 +  case Action::ReuseToken:
 +    b.managed = true;
 +    b.account = decision.account;
 +    b.revision = decision.revision;
++    b.tokenReuse = true;
 +    // Keep the password for the single retry the contract allows if the stored
 +    // token turns out to be rejected or expired.
 +    b.password = snapshot.password;
++    wipe(snapshot.password);
 +    b.tokenRetryAvailable = true;
 +    setStatus(b, "accepted");
 +    return;
 +
-+  case Action::SignOut:
++  case Action::SignOut: {
 +    b.managed = true;
 +    b.tokenLoginAllowed = false;
-+    // Clear first in memory so nothing can authenticate with the old account
-+    // even if the writes below fail.
-+    if (!b.managed_dir.empty()) clear_credentials(b.managed_dir);
-+    if (b.managed_dir.empty() ||
-+        !writeMarkerFile(b, Transition::SignedOut, decision.revision, std::string())) {
++    wipe(snapshot.password);
++    if (b.managed_dir.empty()) {
 +      b.suppressed = true;
 +      setStatus(b, "sign-out-marker-failed");
-+      report(b, "could not record the signed-out account");
++      report(b, "Could not record the signed-out account", "no managed account directory");
++      return;
++    }
++    std::string err;
++    const bool removed = removeTokenFile(b.managed_dir, err);
++    // Record the sign-out even when the token could not be removed: a
++    // signed-out marker never justifies reusing it.
++    if (!writeMarkerFile(b, Transition::SignedOut, decision.revision, std::string())) {
++      b.suppressed = true;
++      setStatus(b, "sign-out-marker-failed");
++      report(b, "Could not record the signed-out account", "the marker was not written");
++      return;
++    }
++    if (!removed) {
++      b.suppressed = true;
++      setStatus(b, "sign-out-token-failed");
++      report(b, "Could not remove the signed-out account's token", err);
 +      return;
 +    }
 +    setStatus(b, "signed-out");
 +    return;
++  }
 +
 +  case Action::ImportLogin:
 +    b.managed = true;
@@ -487,17 +744,26 @@ index 0000000..a508bcf
 +        !writeMarkerFile(b, Transition::Pending, decision.revision, decision.account)) {
 +      // The old files stay exactly as they were, and this session runs without
 +      // managed achievements.
++      wipe(snapshot.password);
 +      b.suppressed = true;
 +      setStatus(b, "pending-marker-failed");
-+      report(b, "could not prepare the Leaf account import");
++      report(b, "Could not prepare the Leaf account import",
++             b.managed_dir.empty() ? "no managed account directory" : "the marker was not written");
 +      return;
 +    }
 +
 +    b.password = snapshot.password;
++    wipe(snapshot.password);
 +    b.pendingLogin = true;
 +    setStatus(b, "pending");
 +    return;
 +  }
++}
++
++bool achievementsOn(bool settingPresent, bool settingOn) {
++  if (settingPresent) return settingOn;
++  Bridge &b = bridge();
++  return b.managed || b.suppressed;
 +}
 +
 +bool takePendingLogin(std::string &username, std::string &password) {
@@ -528,40 +794,47 @@ index 0000000..a508bcf
 +  return b.tokenLoginAllowed;
 +}
 +
++bool loadManagedToken(std::string &username, std::string &token) {
++  Bridge &b = bridge();
++  username.clear();
++  token.clear();
++  if (!b.managed || !b.tokenLoginAllowed || !b.tokenReuse) return false;
++  if (readTokenFile(b.managed_dir, username, token) != TokenStatus::Ok ||
++      username != b.account) {
++    // The file changed under us since import(); never authenticate as anyone
++    // but the account the marker accepted.
++    username.clear();
++    wipe(token);
++    return false;
++  }
++  return true;
++}
++
 +bool commitLogin(const std::string &username, const std::string &token) {
 +  Bridge &b = bridge();
-+  if (!b.managed) {
-+    // An unmanaged native sign-in. Upstream never persists one, so the
-+    // adapter writes DSperate's own token here; that is what makes a manual
-+    // sign-in survive the launch.
-+    if (b.native_dir.empty() || token.empty() || username.empty()) return true;
-+    Credentials creds;
-+    creds.username = username;
-+    creds.token = token;
-+    std::string err;
-+    if (!save_credentials(b.native_dir, creds, err)) {
-+      std::fprintf(stderr, "cheevos: could not save the sign-in: %s\n", err.c_str());
-+      return false;
-+    }
-+    return true;
-+  }
++  // An unmanaged native sign-in lasts for the session, as upstream DSperate's
++  // does: upstream never writes one, and this adapter does not either. In
++  // particular nothing is scattered into the per-game config directories the
++  // Leaf wrapper gives each game.
++  if (!b.managed) return true;
++  (void)username;
 +
 +  if (b.managed_dir.empty() || b.account.empty() || token.empty()) return false;
-+  Credentials creds;
-+  creds.username = b.account;
-+  creds.token = token;
 +  std::string err;
-+  if (!save_credentials(b.managed_dir, creds, err)) {
++  if (!writeTokenFile(b.managed_dir, b.account, token, err)) {
++    // Authenticated, but not durably: the marker stays pending, so the next
++    // launch imports again instead of trusting a token that is not on disk.
 +    b.suppressed = true;
 +    setStatus(b, "token-save-failed");
-+    report(b, "the account was verified but could not be saved");
++    report(b, "The Leaf account was verified but could not be saved", err);
 +    return false;
 +  }
 +  if (!writeMarkerFile(b, Transition::Accepted, b.revision, b.account)) {
 +    // Authenticated and persisted, but the revision is not accepted: the next
 +    // launch imports again rather than trusting an unrecorded state.
 +    setStatus(b, "accept-marker-failed");
-+    report(b, "the account will be imported again on the next launch");
++    report(b, "The Leaf account will be imported again on the next launch",
++           "the marker was not written");
 +    return true;
 +  }
 +  setStatus(b, "accepted");
@@ -577,14 +850,32 @@ index 0000000..a508bcf
 +  // in-memory token is already gone. Gameplay continues without achievements.
 +  b.tokenRetryAvailable = false;
 +  wipe(b.password);
-+  setStatus(b, "login-failed");
-+  report(b, detail.empty() ? reason : detail);
++  setStatus(b, reason);
++  // The native sign-in failure pop-up already names the server's answer; the
++  // log keeps the bridge's reason beside it.
++  std::fprintf(stderr, "cheevos: managed sign-in failed (%s): %s\n", reason.c_str(),
++               detail.c_str());
++}
++
++std::vector<Notice> takeNotices() {
++  std::vector<Notice> out;
++  out.swap(bridge().notices);
++  return out;
 +}
 +
 +bool isManaged() { return bridge().managed; }
 +bool isSuppressed() { return bridge().suppressed; }
 +std::string statusLine() { return bridge().status; }
 +std::string managedAccount() { return bridge().account; }
++
++#ifdef DS_RA_ACCOUNT_TESTING
++void resetForTesting() {
++  Bridge &b = bridge();
++  wipeEnv(b.env);
++  wipe(b.password);
++  b = Bridge{};
++}
++#endif
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/cheevos/ra_account_contract.cpp b/src/cheevos/ra_account_contract.cpp
@@ -1150,7 +1441,7 @@ index 0000000..b26763a
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 4bd7ed8..7ded723 100644
+index 4bd7ed8..b79dbd8 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
 @@ -26,6 +26,7 @@
@@ -1161,7 +1452,20 @@ index 4bd7ed8..7ded723 100644
  #endif
  #if DSPERATE_NET
  #include "net/lan_mp.h"
-@@ -1281,6 +1282,10 @@ static int run(int argc, char** argv) {
+@@ -1173,6 +1174,12 @@ bool g_restart = false;
+ }
+ 
+ static int run(int argc, char** argv) {
++#if DSPERATE_CHEEVOS
++  // UMRK: copy the Leaf account snapshot into private memory and scrub it from
++  // the environment before anything else happens -- before a thread, a helper
++  // or a log line exists (standalone-ra-account-v1, consumer obligations).
++  ds::cheevos::ra_account::captureEnv();
++#endif
+   const char* rom = nullptr;
+   const char* config_arg = nullptr;
+   long frame_limit = 0;
+@@ -1281,6 +1288,10 @@ static int run(int argc, char** argv) {
      // The account that token belongs to, for a launcher that would rather pass
      // both than keep a name in the config.
      else if (arg("--cheevos-user")) cli.set("cheevos.username", argv[++i]);
@@ -1172,7 +1476,7 @@ index 4bd7ed8..7ded723 100644
  #endif
      else if (flag("--autoload")) cli.set("emu.autoload", "true");
      else if (flag("--no-autoload")) cli.set("emu.autoload", "false");
-@@ -1382,7 +1387,7 @@ static int run(int argc, char** argv) {
+@@ -1382,7 +1393,7 @@ static int run(int argc, char** argv) {
    }
    auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
                                                "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.disp", "video.fbdev", "video.vsync", "audio.enabled", "audio.volume",
@@ -1181,25 +1485,37 @@ index 4bd7ed8..7ded723 100644
    apply_cli();
    if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
    const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
-@@ -3158,7 +3163,16 @@ sdl_ready:
+@@ -3158,7 +3169,18 @@ sdl_ready:
    // unless asked for, and every failure here is reported once and then ignored:
    // a device with no libcurl, no network, or no account still plays games.
    ds::cheevos::Client cheevos;
 -  const bool cheevos_on = cfg.flag("cheevos.enabled", false);
 +  // UMRK: consume the Leaf account snapshot before anything can start the
-+  // achievement client. A managed account -- configured, suppressed or signed
-+  // out -- turns achievements on so the account page can report it, while
-+  // import() still decides whether anything authenticates this session.
++  // achievement client. An explicit "achievements off" -- cheevos.enabled =
++  // false in the global or per-game config, or --no-cheevos -- is decided
++  // first and wins: the snapshot is still consumed, but nothing signs in and
++  // nothing on disk changes. Otherwise a managed account (configured,
++  // suppressed or signed out) turns achievements on so the account page can
++  // report it, and import() decides whether anything authenticates.
++  const bool cheevos_setting = cfg.has("cheevos.enabled");
++  const bool cheevos_setting_on = cfg.flag("cheevos.enabled", false);
 +  ds::cheevos::ra_account::setManagedDir(cfg.str("cheevos.managed_dir"));
-+  ds::cheevos::ra_account::setNativeDir(ds::sdl::Config::dir());
-+  ds::cheevos::ra_account::import();
-+  const bool cheevos_on = cfg.flag("cheevos.enabled", false) ||
-+                          ds::cheevos::ra_account::isManaged() ||
-+                          ds::cheevos::ra_account::isSuppressed();
++  ds::cheevos::ra_account::import(cheevos_setting && !cheevos_setting_on);
++  const bool cheevos_on = ds::cheevos::ra_account::achievementsOn(cheevos_setting, cheevos_setting_on);
  #endif
  // Networking is not a part of the achievements feature, and used to be nested
  // inside its guard: DSPERATE_CHEEVOS=OFF with DSPERATE_NET=ON would not
-@@ -3459,26 +3473,44 @@ sdl_ready:
+@@ -3431,7 +3453,8 @@ sdl_ready:
+       // of what earned it.
+       if (m.kind == ds::cheevos::Message::Kind::Unlock && cfg.flag("cheevos.auto_screenshot", false))
+         shot_pending = true;
+-      if (!cfg.flag("cheevos.toasts", true)) continue;
++      // UMRK: a Leaf account problem is shown even with toasts off.
++      if (!cfg.flag("cheevos.toasts", true) && !m.account) continue;
+       // cfg, not the menu host: both read the same key, and the host writes
+       // through cfg, so a switch flipped in the menu is live on the next
+       // message without any wiring between them.
+@@ -3459,26 +3482,44 @@ sdl_ready:
      }
      std::string status() const override {
        if (!c) return "NOT AVAILABLE IN THIS BUILD";
@@ -1253,7 +1569,7 @@ index 4bd7ed8..7ded723 100644
      }
      std::string progress() const override {
        if (!c || sum.total == 0) return {};
-@@ -3628,6 +3660,32 @@ sdl_ready:
+@@ -3628,6 +3669,27 @@ sdl_ready:
        // nothing else to try here; a token the server has expired comes back as
        // a failure and the player signs in again from the menu (phase 4).
        ds::cheevos::Credentials creds;
@@ -1267,13 +1583,8 @@ index 4bd7ed8..7ded723 100644
 +        if (ds::cheevos::ra_account::takePendingLogin(managed_user, managed_password)) {
 +          cheevos.sign_in(managed_user, managed_password);
 +          managed_password.assign(managed_password.size(), '\0');
-+        } else if (ds::cheevos::ra_account::isTokenLoginAllowed()) {
-+          std::string managed_err;
-+          if (!ds::cheevos::load_credentials(ds::cheevos::ra_account::managedDir(), creds,
-+                                             managed_err) &&
-+              !managed_err.empty())
-+            std::fprintf(stderr, "cheevos: %s\n", managed_err.c_str());
-+          if (!creds.empty()) cheevos.sign_in_with_token(creds.username, creds.token);
++        } else if (ds::cheevos::ra_account::loadManagedToken(creds.username, creds.token)) {
++          cheevos.sign_in_with_token(creds.username, creds.token);
 +        } else {
 +          std::fprintf(stderr, "cheevos: managed account not signed in this session\n");
 +        }
@@ -1286,7 +1597,7 @@ index 4bd7ed8..7ded723 100644
        // A token file named on the command line comes first: it is this run's
        // explicit instruction, and the point of it is to override whatever is
        // stored. Nothing is written back -- the file is not ours, and the run
-@@ -3666,6 +3724,7 @@ sdl_ready:
+@@ -3666,6 +3728,7 @@ sdl_ready:
        }
        if (!creds.empty()) cheevos.sign_in_with_token(creds.username, creds.token);
        else std::fprintf(stderr, "cheevos: not signed in\n");
