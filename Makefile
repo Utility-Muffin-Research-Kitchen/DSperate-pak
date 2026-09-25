@@ -39,7 +39,7 @@ CONTRACT_REPO ?= https://github.com/Utility-Muffin-Research-Kitchen/leaf-contrac
 # The same commit carries standalone-ra-account-v1, whose fixtures the account
 # adapter replays; tests/ra-account/contract.lock.json pins it with the
 # fixtures' sha256, and `make test-ra-account` refuses anything else.
-CONTRACT_REF ?= f25fd2a18fe02bee72141a8a8f220aad28551e29
+CONTRACT_REF ?= f7c25c6b27ac79beb9ee08b0b4fdde54375df081
 CONTRACT_DIR ?= $(BUILD)/contract/$(CONTRACT_REF)
 
 LOCK := $(REPO_ROOT)/standalone/upstream.lock.json
