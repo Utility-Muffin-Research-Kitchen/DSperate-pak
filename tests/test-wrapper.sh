@@ -36,6 +36,7 @@ cat >"$PAK/bin/dsperate" <<'FAKE'
 for a in "$@"; do
     if [ "$a" = "--inspect-cart" ]; then
         printf '%s\n' "$@" >"${DS_FAKE_OUT}.inspect"
+        env | grep -E '^(UMRK_RA_ACCOUNT_|JAWAKA_CHEEVOS_)' >"${DS_FAKE_OUT}.inspect.env" || true
         [ -n "${DS_FAKE_INSPECT:-}" ] && printf '%s\n' "$DS_FAKE_INSPECT"
         [ -n "${DS_FAKE_INSPECT_ERR:-}" ] && printf '%s\n' "$DS_FAKE_INSPECT_ERR" >&2
         exit "${DS_FAKE_INSPECT_RC:-0}"
@@ -44,6 +45,13 @@ done
 : >"$DS_FAKE_OUT"
 for a in "$@"; do printf '%s\n' "$a" >>"$DS_FAKE_OUT"; done
 printf '%s\n' "$XDG_CONFIG_HOME" >"$DS_FAKE_OUT.xdg"
+: >"$DS_FAKE_OUT.env"
+for v in UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME \
+         UMRK_RA_ACCOUNT_PASSWORD UMRK_RA_ACCOUNT_REVISION JAWAKA_CHEEVOS_USERNAME \
+         JAWAKA_CHEEVOS_PASSWORD; do
+    eval "set_=\${$v+1} val_=\${$v-}"
+    if [ -n "$set_" ]; then printf '%s=[%s]\n' "$v" "$val_" >>"$DS_FAKE_OUT.env"; fi
+done
 printf '%s\n' "$SDL_VIDEODRIVER" "${DS_ROTATE-unset}" >"$DS_FAKE_OUT.video"
 FAKE
 cat >"$PAK/bin/dsperate-notice" <<'FAKE'
@@ -350,6 +358,112 @@ rm -f "$OUT" "$NOTICE"
 DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=yes\nbytes=524288')"
 DS_TOTAL_CACHE_MB=0 DS_CACHE_MARGIN_MB=0 DS_NOTICE_OUT="$NOTICE" run_wrapper "$ZIP" >/dev/null 2>&1
 check_contains "$NOTICE" "Not enough space" "budget refusal notice"
+
+# --- standalone-ra-account-v1 handoff ------------------------------------------
+# The snapshot reaches the emulator exactly as Jawaka exported it, and nothing
+# else: no helper the wrapper runs (awk, sed, sha256sum, du, ...), not the
+# --inspect-cart preflight, not argv, not the log. Every helper the wrapper can
+# run is shadowed by a recorder that notes any account variable or the secret
+# in its environment, then runs the real tool. Synthetic credentials only.
+RA_SECRET='synthetic pass phrase 7'
+RA_STALE_SECRET='synthetic retroarch secret 9'
+SHADOW="$TMP/shadow"
+HELPER_LOG="$TMP/helpers.log"
+mkdir -p "$SHADOW"
+: >"$HELPER_LOG"
+for tool in awk sed tr sha256sum du df ls mkdir cp mv cat rm basename dirname touch head tail wc sort; do
+    real="$(command -v "$tool" 2>/dev/null)" || continue
+    case "$real" in /*) ;; *) continue ;; esac
+    cat >"$SHADOW/$tool" <<SHIM
+#!/bin/sh
+if env | grep -Eq '^(UMRK_RA_ACCOUNT_|JAWAKA_CHEEVOS_)' || env | grep -Fq -e '$RA_SECRET' -e '$RA_STALE_SECRET'; then
+    printf '%s saw the account environment\n' '$tool' >>'$HELPER_LOG'
+fi
+exec '$real' "\$@"
+SHIM
+    chmod 755 "$SHADOW/$tool"
+done
+
+ra_launch() {
+    # ra_launch ROM [VAR=VALUE ...]: launch with the given account variables,
+    # every helper shadowed, stdout/stderr captured.
+    _rom="$1"
+    shift
+    rm -f "$OUT" "$OUT.env" "$OUT.inspect" "$OUT.inspect.env"
+    ( for assignment in "$@"; do export "$assignment"; done
+      PATH="$SHADOW:$PATH" run_wrapper "$_rom" >"$TMP/ra-stdout.txt" 2>&1 )
+}
+
+MANAGED="$SD/.userdata/mlp1/dsperate/retroachievements"
+LOGFILE="$SD/.userdata/mlp1/logs/dsperate.log"
+DS_FAKE_INSPECT_RC=0 DS_FAKE_INSPECT_ERR=""
+DS_FAKE_INSPECT="$(printf 'kind=zip\nextract=no\nbytes=1024\nentry=Game.nds')"
+: >"$HELPER_LOG"
+ra_launch "$ZIP" \
+    UMRK_RA_ACCOUNT_VERSION=1 UMRK_RA_ACCOUNT_STATE=configured \
+    UMRK_RA_ACCOUNT_USERNAME=player-one "UMRK_RA_ACCOUNT_PASSWORD=$RA_SECRET" \
+    UMRK_RA_ACCOUNT_REVISION=7 \
+    JAWAKA_CHEEVOS_USERNAME=player-one "JAWAKA_CHEEVOS_PASSWORD=$RA_STALE_SECRET"
+[ -e "$OUT" ] && pass || fail "account launch reached the emulator"
+[ -s "$SHADOW/awk" ] && [ -s "$SHADOW/sha256sum" ] && pass || fail "helpers are shadowed"
+if [ -s "$HELPER_LOG" ]; then fail "a helper saw the account environment: $(sort -u "$HELPER_LOG" | tr '\n' ' ')"; else pass; fi
+[ -e "$OUT.inspect" ] && pass || fail "the zip preflight ran"
+if [ -s "$OUT.inspect.env" ]; then fail "--inspect-cart saw the account environment"; else pass; fi
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_VERSION=[1]" "emulator gets VERSION"
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_STATE=[configured]" "emulator gets STATE"
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_USERNAME=[player-one]" "emulator gets USERNAME"
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_PASSWORD=[$RA_SECRET]" "emulator gets PASSWORD byte for byte"
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_REVISION=[7]" "emulator gets REVISION"
+# A leaked RetroArch pair: its presence reaches the emulator, which then
+# refuses the handoff, but its value never does.
+check_contains "$OUT.env" "JAWAKA_CHEEVOS_USERNAME=[]" "leaked RetroArch username: presence only"
+check_contains "$OUT.env" "JAWAKA_CHEEVOS_PASSWORD=[]" "leaked RetroArch password: presence only"
+if grep -Fq "$RA_STALE_SECRET" "$OUT.env"; then fail "the RetroArch password reached the emulator"; else pass; fi
+# The managed directory: one non-secret argument, created, shared by all games.
+if [ "$(sed -n '/^--managed-account-dir$/{n;p;}' "$OUT")" = "$MANAGED" ]; then pass; else fail "--managed-account-dir names the shared userdata directory"; fi
+[ "$(grep -c '^--managed-account-dir$' "$OUT")" = 1 ] && pass || fail "--managed-account-dir passed once"
+[ -d "$MANAGED" ] && pass || fail "managed account directory created"
+case "$MANAGED" in "$SD/.userdata/mlp1/dsperate/games/"*|"$SD/Roms/"*) fail "managed directory is per-game or beside ROMs" ;; *) pass ;; esac
+[ "$(tail -n 1 "$OUT")" = "$ZIP" ] && pass || fail "content path still last with the account"
+for leak in "$RA_SECRET" "$RA_STALE_SECRET"; do
+    if grep -Fq "$leak" "$OUT"; then fail "a secret is in argv"; else pass; fi
+    if grep -Fq "$leak" "$LOGFILE"; then fail "a secret is in the log"; else pass; fi
+    if grep -Fq "$leak" "$TMP/ra-stdout.txt"; then fail "a secret is on stdout/stderr"; else pass; fi
+done
+if grep -Fq "$RA_SECRET" "$OUT.inspect"; then fail "a secret is in the preflight argv"; else pass; fi
+
+# The same account on a loose .nds (no preflight), and a second game: the same
+# managed directory, not a per-game one.
+ra_launch "$ROM" UMRK_RA_ACCOUNT_VERSION=1 UMRK_RA_ACCOUNT_STATE=signed-out UMRK_RA_ACCOUNT_REVISION=8
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_STATE=[signed-out]" "signed-out snapshot reaches the emulator"
+if grep -q '^JAWAKA_CHEEVOS_' "$OUT.env"; then fail "no RetroArch pair invented"; else pass; fi
+if grep -q '^UMRK_RA_ACCOUNT_PASSWORD=' "$OUT.env"; then fail "an absent variable is fabricated"; else pass; fi
+[ "$(sed -n '/^--managed-account-dir$/{n;p;}' "$OUT")" = "$MANAGED" ] && pass || fail "second game shares the managed directory"
+
+# Set-but-empty stays set-but-empty: the classifier tells it from absent.
+ra_launch "$ROM" UMRK_RA_ACCOUNT_VERSION=1 UMRK_RA_ACCOUNT_STATE=configured \
+    UMRK_RA_ACCOUNT_USERNAME= "UMRK_RA_ACCOUNT_PASSWORD=$RA_SECRET" UMRK_RA_ACCOUNT_REVISION=1
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_USERNAME=[]" "an empty variable stays set"
+
+# No handoff at all: nothing account-related reaches the emulator.
+ra_launch "$ROM"
+[ -e "$OUT.env" ] && [ ! -s "$OUT.env" ] && pass || fail "no handoff: the emulator sees no account variable"
+if [ -s "$HELPER_LOG" ]; then fail "a helper saw the account environment (later launches)"; else pass; fi
+
+# env.sh is durable launcher state, never a credential source: an account
+# variable it sets is dropped, and a real per-launch snapshot still wins.
+ENVSH="$TMP/env-with-account.sh"
+cat >"$ENVSH" <<ENVEOF
+export UMRK_RA_ACCOUNT_PASSWORD='from env.sh'
+export JAWAKA_CHEEVOS_PASSWORD='from env.sh'
+export UMRK_RA_ACCOUNT_STATE=configured
+ENVEOF
+ra_launch "$ROM" "UMRK_ENV_FILE=$ENVSH"
+if grep -q 'from env.sh' "$OUT.env"; then fail "env.sh credentials reached the emulator"; else pass; fi
+if grep -q '^UMRK_RA_ACCOUNT_STATE=' "$OUT.env"; then fail "env.sh account state reached the emulator"; else pass; fi
+ra_launch "$ROM" "UMRK_ENV_FILE=$ENVSH" UMRK_RA_ACCOUNT_VERSION=1 UMRK_RA_ACCOUNT_STATE=never-configured
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_STATE=[never-configured]" "the per-launch snapshot wins over env.sh"
+if grep -q 'from env.sh' "$OUT.env"; then fail "env.sh leaked beside a real snapshot"; else pass; fi
 
 echo "test-wrapper: $((checks - failures))/$checks checks passed"
 [ "$failures" -eq 0 ]

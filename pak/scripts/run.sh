@@ -19,6 +19,45 @@
 #
 set -u
 
+# standalone-ra-account-v1. Jawaka exports this child-only account snapshot to
+# an authorized DSperate launch and to nothing else. Copy it into shell
+# variables and unset it before anything runs: every helper below (awk, tr,
+# sha256sum, du, sed) inherits this process's environment, and the password has
+# no business in any of them. It is re-exported immediately before the emulator
+# exec, and never logged, never echoed, never put in argv.
+umrk_ra_set_version="${UMRK_RA_ACCOUNT_VERSION+1}"
+umrk_ra_set_state="${UMRK_RA_ACCOUNT_STATE+1}"
+umrk_ra_set_username="${UMRK_RA_ACCOUNT_USERNAME+1}"
+umrk_ra_set_password="${UMRK_RA_ACCOUNT_PASSWORD+1}"
+umrk_ra_set_revision="${UMRK_RA_ACCOUNT_REVISION+1}"
+umrk_ra_version="${UMRK_RA_ACCOUNT_VERSION-}"
+umrk_ra_state="${UMRK_RA_ACCOUNT_STATE-}"
+umrk_ra_username="${UMRK_RA_ACCOUNT_USERNAME-}"
+umrk_ra_password="${UMRK_RA_ACCOUNT_PASSWORD-}"
+umrk_ra_revision="${UMRK_RA_ACCOUNT_REVISION-}"
+unset UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME \
+    UMRK_RA_ACCOUNT_PASSWORD UMRK_RA_ACCOUNT_REVISION
+# RetroArch's per-launch credential pair has no business in a standalone
+# emulator's launch at all; the producer scrubs it. If an inherited one leaked
+# through anyway, no helper here may see it either. Only its presence is passed
+# on (as an empty value), so the emulator still refuses the handoff as the
+# contract requires, without ever receiving that password.
+umrk_ra_stale_username="${JAWAKA_CHEEVOS_USERNAME+1}"
+umrk_ra_stale_password="${JAWAKA_CHEEVOS_PASSWORD+1}"
+unset JAWAKA_CHEEVOS_USERNAME JAWAKA_CHEEVOS_PASSWORD
+
+restore_ra_account_snapshot() {
+    [ -n "$umrk_ra_set_version" ] && export UMRK_RA_ACCOUNT_VERSION="$umrk_ra_version"
+    [ -n "$umrk_ra_set_state" ] && export UMRK_RA_ACCOUNT_STATE="$umrk_ra_state"
+    [ -n "$umrk_ra_set_username" ] && export UMRK_RA_ACCOUNT_USERNAME="$umrk_ra_username"
+    [ -n "$umrk_ra_set_password" ] && export UMRK_RA_ACCOUNT_PASSWORD="$umrk_ra_password"
+    [ -n "$umrk_ra_set_revision" ] && export UMRK_RA_ACCOUNT_REVISION="$umrk_ra_revision"
+    [ -n "$umrk_ra_stale_username" ] && export JAWAKA_CHEEVOS_USERNAME=
+    [ -n "$umrk_ra_stale_password" ] && export JAWAKA_CHEEVOS_PASSWORD=
+    return 0
+}
+
+# Resolved only now: dirname is a helper process too.
 ROOT_DIR="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 
 # --- runtime environment -----------------------------------------------------
@@ -30,6 +69,12 @@ elif [ -n "${SDCARD_PATH:-}" ] && [ -n "${PLATFORM:-}" ] &&
      [ -f "$SDCARD_PATH/.system/leaf/platforms/$PLATFORM/launcher/env.sh" ]; then
     . "$SDCARD_PATH/.system/leaf/platforms/$PLATFORM/launcher/env.sh"
 fi
+# The account snapshot is per-launch state from the daemon, never durable
+# environment. A value that appears here came from env.sh, which is exactly
+# where credentials must not be, so drop it instead of passing it on.
+unset UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME \
+    UMRK_RA_ACCOUNT_PASSWORD UMRK_RA_ACCOUNT_REVISION \
+    JAWAKA_CHEEVOS_USERNAME JAWAKA_CHEEVOS_PASSWORD
 
 : "${PLATFORM:=mlp1}"
 : "${SDCARD_PATH:=/mnt/sdcard}"
@@ -50,6 +95,10 @@ BIN="$ROOT_DIR/bin/dsperate"
 NOTICE_BIN="$ROOT_DIR/bin/dsperate-notice"
 LOG_FILE="$LOGS_PATH/dsperate.log"
 CACHE_ROOT="$STATE_ROOT/cache"
+# standalone-ra-account-v1: the non-secret directory the native managed token
+# (cheevos.token) and its revision marker (.umrk-ra-account) live in. Shared
+# across games and cards on the primary card, never beside a ROM.
+MANAGED_DIR="$STATE_ROOT/retroachievements"
 NOTICE_FONT=""
 
 log() { printf 'dsperate: %s\n' "$*" 2>/dev/null >>"$LOG_FILE" || true; }
@@ -172,7 +221,7 @@ STATES_DIR="$STATES_PATH/DSperate/$GAME_KEY"
 SHOTS_DIR="$STATES_DIR/screenshots"
 CACHE_DIR="$CACHE_DIR/$GAME_KEY"
 mkdir -p "$RUNTIME_DIR" "$STATE_ROOT" "$SAVES_DIR" "$STATES_DIR" "$SHOTS_DIR" \
-         "$CACHE_DIR" "$LOGS_PATH" || die "cannot create game data directories"
+         "$CACHE_DIR" "$LOGS_PATH" "$MANAGED_DIR" || die "cannot create game data directories"
 
 ROM_STEM="$(basename -- "$ROM_PATH")"
 case "$ROM_STEM" in
@@ -489,11 +538,15 @@ FW="$(bios_file "$NDS_BIOS_DIR/nds_firmware.bin")"
 # direct-panel tiers out of the way; --no-mic disables real capture.
 set -- --config "$GLOBAL_INI" --cache-root-only --single-rom \
        --save "$SAVES_DIR/$ROM_STEM.sav" \
-       --no-disp --no-fbdev --fullscreen --no-mic
+       --no-disp --no-fbdev --fullscreen --no-mic \
+       --managed-account-dir "$MANAGED_DIR"
 
 [ -n "$ARM9" ] && set -- "$@" --bios9 "$ARM9"
 [ -n "$ARM7" ] && set -- "$@" --bios7 "$ARM7"
 [ -n "$FW" ]   && set -- "$@" --firmware "$FW"
 
 log "launching $BIN for $ROM_REL (saves=$SAVES_DIR states=$STATES_DIR)"
+# The snapshot is restored only now, for the emulator itself; the helpers above
+# never saw it.
+restore_ra_account_snapshot
 exec "$BIN" "$@" "$ROM_PATH"

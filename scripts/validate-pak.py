@@ -63,6 +63,30 @@ def authored_paths_present(manifest: dict, pak_dir: Path) -> bool:
     return all((pak_dir / value).is_file() for value in authored)
 
 
+# standalone-ra-account-v1 capability record. Jawaka reads this file from the
+# installed pak before it hands the Leaf RetroAchievements account to DSperate,
+# and accepts exactly this content with at most one trailing newline -- so this
+# validator applies the same rule, byte for byte, and a package whose record
+# Jawaka would refuse cannot pass here either.
+RA_ACCOUNT_RECORD = "ra-account-v1"
+RA_ACCOUNT_CONTRACT = b"standalone-ra-account-v1"
+
+
+def check_ra_account_record(pak_dir: Path, required: bool) -> str | None:
+    """None when the record is acceptable (or absent and not required)."""
+    path = pak_dir / RA_ACCOUNT_RECORD
+    if not path.exists() and not path.is_symlink():
+        return f"missing {RA_ACCOUNT_RECORD}" if required else None
+    if path.is_symlink() or not path.is_file():
+        return f"{RA_ACCOUNT_RECORD} is not a regular file"
+    data = path.read_bytes()
+    if data not in (RA_ACCOUNT_CONTRACT, RA_ACCOUNT_CONTRACT + b"\n"):
+        return (f"{RA_ACCOUNT_RECORD} must contain exactly "
+                f"{RA_ACCOUNT_CONTRACT.decode()!r} and at most one trailing newline "
+                f"(found {data[:64]!r})")
+    return None
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--contract", required=True, type=Path)
@@ -144,6 +168,15 @@ def main() -> int:
                 print(f"FAIL package: missing {rel}")
                 return 1
         print("ok   package: wrapper, binaries, defaults and licence notice")
+
+    # The account capability record: checked whenever it is present, and
+    # required in a built package, which is what Jawaka installs and reads.
+    record_error = check_ra_account_record(pak_dir, required=args.packaged)
+    if record_error:
+        print(f"FAIL ra-account: {record_error}")
+        return 1
+    if (pak_dir / RA_ACCOUNT_RECORD).is_file():
+        print("ok   ra-account: standalone-ra-account-v1 capability record")
 
     # Branding assets are intentionally not NDS system art declarations.
     for rel in ("res/icon.png", "art/DSperate-flat.png", "art/DSperate-photo.png",

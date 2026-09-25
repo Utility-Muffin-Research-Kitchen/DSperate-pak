@@ -15,6 +15,8 @@
 #   make test-pgo       check the locked PGO profile and the strict build gate
 #   make test-lock      check pak.json, the lock and the patches agree
 #   make test-docs      check README and PROVENANCE quote the locked build
+#   make test-ra-account  replay the pinned account fixtures, bridge fault tests
+#   make test-validate-pak  the validator's ra-account-v1 record rule
 #   make test-archive-cli  run the archive CLI checks against the built binary
 #   make test-version   --version from the git build and from the source tar
 #   make test-archives  build both archives twice and compare their bytes
@@ -34,8 +36,11 @@ ARTIFACT := $(DIST)/DSperate.mlp1.pak.zip
 # precisely so that a contract a third party is judged against is one they can
 # read. CI pins a SHA; a local clone is fine for development.
 CONTRACT_REPO ?= https://github.com/Utility-Muffin-Research-Kitchen/leaf-contracts.git
-CONTRACT_REF ?= 699ce2dbced68c8f2529c3a5ffc51dda106e2df7
-CONTRACT_DIR ?= $(BUILD)/contract
+# The same commit carries standalone-ra-account-v1, whose fixtures the account
+# adapter replays; tests/ra-account/contract.lock.json pins it with the
+# fixtures' sha256, and `make test-ra-account` refuses anything else.
+CONTRACT_REF ?= f7c25c6b27ac79beb9ee08b0b4fdde54375df081
+CONTRACT_DIR ?= $(BUILD)/contract/$(CONTRACT_REF)
 
 LOCK := $(REPO_ROOT)/standalone/upstream.lock.json
 lock_get = $(shell python3 -c 'import functools,json,sys;print(functools.reduce(lambda v,k:v[int(k)] if isinstance(v,list) else v[k],sys.argv[2:],json.load(open(sys.argv[1]))))' "$(LOCK)" $(1))
@@ -48,12 +53,12 @@ IN_IMAGE = docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp \
 	-v "$(REPO_ROOT)":"$(REPO_ROOT)":ro -v "$(BUILD)":"$(BUILD)" -w "$(REPO_ROOT)" \
 	"$(IMAGE_REF)"
 
-.PHONY: all standalone verify-standalone package-mlp1 dist-pakrat dist-source validate test-wrapper test-profile test-pgo test-lock test-docs test-archive-cli test-version test-archives check clean distclean help
+.PHONY: all standalone verify-standalone package-mlp1 dist-pakrat dist-source validate test-wrapper test-profile test-pgo test-lock test-docs test-ra-account test-validate-pak test-archive-cli test-version test-archives check clean distclean help
 
 all: dist-pakrat
 
 help:
-	@sed -n '1,22p' $(lastword $(MAKEFILE_LIST))
+	@sed -n '1,24p' $(lastword $(MAKEFILE_LIST))
 
 standalone:
 	@"$(REPO_ROOT)/standalone/build-dsperate.sh"
@@ -70,6 +75,7 @@ package-mlp1: standalone
 	@cp "$(REPO_ROOT)/pak/pak.json" "$(PACKAGE)/pak.json"
 	@cp "$(REPO_ROOT)/pak/art/"* "$(PACKAGE)/art/"
 	@cp "$(REPO_ROOT)/pak/res/icon.png" "$(PACKAGE)/res/icon.png"
+	@cp "$(REPO_ROOT)/pak/ra-account-v1" "$(PACKAGE)/ra-account-v1"
 	@cp "$(REPO_ROOT)/pak/scripts/run.sh" "$(PACKAGE)/scripts/run.sh"
 	@cp "$(REPO_ROOT)/pak/defaults/dsperate.ini" "$(PACKAGE)/defaults/dsperate.ini"
 	@cp "$(REPO_ROOT)/pak/defaults/config.version" "$(PACKAGE)/defaults/config.version"
@@ -167,6 +173,15 @@ test-lock:
 test-docs:
 	@python3 "$(REPO_ROOT)/tests/test-docs.py"
 
+# standalone-ra-account-v1: the pinned leaf-contracts fixtures replayed through
+# the adapter compiled out of patch 0005, plus its state and bridge fault tests.
+# Host C++ only; no build, Docker or device.
+test-ra-account: | $(CONTRACT_DIR)
+	@bash "$(REPO_ROOT)/tests/test-ra-account.sh" "$(CONTRACT_DIR)" "$(BUILD)/ra-account"
+
+test-validate-pak: | $(CONTRACT_DIR)
+	@python3 "$(REPO_ROOT)/tests/test-validate-pak.py" "$(CONTRACT_DIR)"
+
 # The real executable, run in the pinned AArch64 image through the SDK loader.
 test-archive-cli: standalone
 	@$(IN_IMAGE) sh -c 'sysroot=/opt/mlp1-toolchain/aarch64-buildroot-linux-gnu/sysroot; \
@@ -181,7 +196,7 @@ test-version: standalone dist-source
 test-archives: package-mlp1
 	@bash "$(REPO_ROOT)/tests/test-archives.sh" "$(BUILD)"
 
-check: validate test-wrapper test-profile test-pgo test-lock test-docs package-mlp1 test-archive-cli
+check: validate test-wrapper test-profile test-pgo test-lock test-docs test-ra-account test-validate-pak package-mlp1 test-archive-cli
 	@python3 "$(REPO_ROOT)/scripts/validate-pak.py" \
 		--contract "$(CONTRACT_DIR)" --pak "$(PACKAGE)" --packaged
 
