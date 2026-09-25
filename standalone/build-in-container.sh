@@ -10,6 +10,10 @@ set -euo pipefail
 
 : "${CROSS:?}" "${SOURCE_DATE_EPOCH:?}" "${GLIBC_CEILING:?}" "${ARTIFACT:?}" "${CHEEVOS_VERSION:?}" "${NOTICE_ARTIFACT:?}"
 export SOURCE_DATE_EPOCH
+# The locked --version identity. cmake/version.cmake prefers these over git, so
+# the stamp is the same from a git checkout and a corresponding-source archive.
+export DSPERATE_LOCK_VERSION="${DSPERATE_LOCK_VERSION:?}"
+export DSPERATE_LOCK_COMMIT="${DSPERATE_LOCK_COMMIT:?}"
 export PATH="/opt/mlp1-toolchain/bin:$PATH"
 
 BUILD=/work/build
@@ -40,6 +44,7 @@ cmake -S /src -B "$BUILD" -G Ninja \
   -DDSPERATE_WAYLAND=ON \
   -DDSPERATE_CHEEVOS_VERSION="$CHEEVOS_VERSION" \
   -DDSPERATE_PGO=use \
+  -DDSPERATE_PGO_STRICT=ON \
   -DDSPERATE_PGO_DIR=/standalone/pgo/aarch64 \
   >/work/configure.log 2>&1 || { echo "build-in-container: configure failed;" >&2; tail -60 /work/configure.log >&2; exit 1; }
 
@@ -70,6 +75,39 @@ cmake --build "$BUILD" --target dsperate -j"$JOBS" >/work/build.log 2>&1 || {
   tail -60 /work/build.log >&2
   exit 1
 }
+
+# PGO strictness. DSPERATE_PGO_STRICT=ON keeps GCC's per-object
+# "profile count data file not found" and per-function "control flow ...
+# does not match" warnings in the log instead of silencing them. Whole groups
+# are never trained, because a headless training run never executes them: the
+# SDL frontend, the achievement code, the standalone tools, miniz's inflate and
+# the reference kernels. Anything outside those groups without a profile is a
+# scene that stopped running, and a control-flow mismatch is a function that
+# changed since the profile was made. Either one means the shipped binary is
+# not the profile-guided build the lock describes, so the build fails. This is
+# the same count upstream's tools/pgo_refresh.sh prints after a refresh.
+PGO_UNTRAINED='src/frontend/sdl/|rcheevos|cheevos|tools#|miniz|kernels_ref'
+pgo_missing="$(grep -c 'data file not found' /work/build.log || true)"
+pgo_unexpected="$(grep 'data file not found' /work/build.log | grep -cEv "$PGO_UNTRAINED" || true)"
+pgo_mismatch="$(grep -c 'control flow of function' /work/build.log || true)"
+log "PGO strict: objects without a profile: $pgo_missing, of which $pgo_unexpected outside the never-trained groups; control-flow mismatches: $pgo_mismatch"
+if [ "$pgo_unexpected" != 0 ]; then
+  echo "build-in-container: trained objects are missing their profile:" >&2
+  grep 'data file not found' /work/build.log | grep -Ev "$PGO_UNTRAINED" \
+    | sed -E 's/.*pgo\/aarch64\/(.*)\.gcda.*/    \1/' >&2
+  exit 1
+fi
+if [ "$pgo_mismatch" != 0 ]; then
+  echo "build-in-container: functions no longer match the locked profile:" >&2
+  grep 'control flow of function' /work/build.log | head -20 >&2
+  exit 1
+fi
+if [ "$pgo_missing" = 0 ]; then
+  # STRICT always reports the never-trained groups. Seeing none means the
+  # warnings were not produced at all, so the gate above proved nothing.
+  echo "build-in-container: PGO strict warnings are absent; the strictness check did not run" >&2
+  exit 1
+fi
 
 BIN="$(find "$BUILD" -type f -name dsperate -perm -u+x -print -quit)"
 [ -n "$BIN" ] || { echo "build-in-container: no dsperate executable was produced" >&2; exit 1; }

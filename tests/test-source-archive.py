@@ -21,13 +21,16 @@ with tarfile.open(sys.argv[1]) as archive:
         assert read(name), f"missing source input: {name}"
     for patch in lock["patches"]:
         assert hashlib.sha256(read("standalone/patches/" + patch["file"])).hexdigest() == patch["sha256"]
-    profile_dir = PurePosixPath(lock["pgo"]["dir"])
-    profile = sorted(member.name for member in archive.getmembers()
-                     if member.isfile() and PurePosixPath(member.name).parent == profile_dir)
-    assert str(profile_dir / "MANIFEST") in profile
-    digest = hashlib.sha256()
-    for name in profile:
-        digest.update(PurePosixPath(name).name.encode() + b"\0")
-        digest.update(read(name))
-    assert digest.hexdigest() == lock["pgo"]["sha256"], "PGO profile differs from the shipped binary's lock"
-print("test-source-archive: locked PGO, patches and build inputs present")
+    if lock["build"].get("pgo") == "use":
+        profile_dir = PurePosixPath(lock["pgo"]["dir"])
+        profile = sorted(member.name for member in archive.getmembers()
+                         if member.isfile() and PurePosixPath(member.name).parent == profile_dir)
+        assert str(profile_dir / "MANIFEST") in profile
+        digest = hashlib.sha256()
+        for name in profile:
+            digest.update(PurePosixPath(name).name.encode() + b"\0")
+            digest.update(read(name))
+        assert digest.hexdigest() == lock["pgo"]["sha256"], "PGO profile differs from the shipped binary's lock"
+        print("test-source-archive: locked PGO, patches and build inputs present")
+    else:
+        print("test-source-archive: no PGO profile locked (unprofiled candidate); patches and build inputs present")

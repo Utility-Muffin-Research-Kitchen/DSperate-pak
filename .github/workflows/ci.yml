@@ -34,8 +34,8 @@ jobs:
       - name: Validate pak.json against CONTENT-1
         run: make validate CONTRACT_DIR="$PWD/.contract"
 
-      - name: Check wrapper and MLP1 profile
-        run: make test-wrapper test-profile
+      - name: Check wrapper, MLP1 pad profile, PGO lock, manifest/lock and docs
+        run: make test-wrapper test-profile test-pgo test-lock test-docs
 
       - name: Refuse a launch.sh
         run: |
@@ -59,18 +59,35 @@ jobs:
           echo "no sibling-checkout references"
 
   build:
-    runs-on: ubuntu-latest
+    # Native arm64: an independent build on the device architecture. The
+    # toolchain image is a cross-compiler, so the host variant does not change
+    # the target where it matters, but building on arm64 removes any doubt.
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build the pinned DSperate binary
+      - name: Build the pinned DSperate binary (strict PGO)
         run: make standalone
+
+      - name: Archive CLI checks against the real binary
+        run: make test-archive-cli
 
       - name: Package and hash
         run: make dist-pakrat
 
       - name: Corresponding source (GPLv3)
         run: make dist-source
+
+      - name: --version from the git build and a rebuild from the source archive
+        run: make test-version
+
+      - name: Archives are byte-deterministic
+        run: make test-archives
+
+      - name: Record artifact hashes
+        run: |
+          sha256sum build/standalone/dsperate build/standalone/dsperate-notice \
+            build/dist/DSperate.mlp1.pak.zip build/dist/dsperate-corresponding-source.tar.gz
 
       - name: Check out the pinned contract
         uses: actions/checkout@v4

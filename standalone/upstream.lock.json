@@ -4,8 +4,8 @@
   "core": {
     "id": "dsperate",
     "source_url": "https://github.com/beebono/DSperate.git",
-    "source_tag": "v2.0.0",
-    "source_commit": "86bef065f93c55fc59c5ab5e93e06c812fcd7bf7",
+    "source_tag": "v2.1.1",
+    "source_commit": "baec96501802bb04203cac07b420c67eff8054b8",
     "license": "GPL-3.0-or-later",
     "license_path_in_source": "LICENSE"
   },
@@ -15,10 +15,12 @@
     "wayland_define": "-DSDL_VIDEO_DRIVER_WAYLAND=1",
     "wayland_note": "The toolchain sysroot's SDL2 2.28.5 is built without its Wayland driver, so its SDL_config.h leaves SDL_VIDEO_DRIVER_WAYLAND undefined and SDL_syswm.h hides SDL_SysWMinfo's Wayland fields. Defining the macro for this build exposes those fields without changing the toolchain, and is what lets the intended dmabuf tier compile. The public union reserves the fields' space regardless, and the binary links the device's Wayland-capable SDL at runtime. The build fails if the probe or display_wl.cpp does not confirm the real tier.",
     "language": "C++17, upstream CMake/Ninja build",
-    "source_date_epoch": 1789612242,
-    "source_date_note": "The pinned commit's committer timestamp.",
-    "cheevos_version": "2.0.0",
+    "source_date_epoch": 1789871851,
+    "source_date_note": "The pinned v2.1.1 commit's committer timestamp.",
+    "cheevos_version": "2.1.1",
     "cheevos_version_note": "Passed explicitly because a shallow checkout has no tags for upstream's `git describe` fallback.",
+    "pgo": "use",
+    "pgo_note": "A fresh aarch64 profile was trained with this pak's own toolchain (Buildroot GCC 12.3.0) and these flags against the patched v2.1.1 source, so its fingerprint matches the release build. Upstream v2.1.1 ships profiles for GCC 10.5 and 12.4.0 only, which this toolchain refuses.",
     "cmake": [
       "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
       "-DCMAKE_TOOLCHAIN_FILE=<standalone>/mlp1-toolchain.cmake",
@@ -27,27 +29,33 @@
       "-DDSPERATE_HEADLESS=OFF",
       "-DDSPERATE_CHEEVOS=ON",
       "-DDSPERATE_WAYLAND=ON",
-      "-DDSPERATE_CHEEVOS_VERSION=2.0.0",
+      "-DDSPERATE_CHEEVOS_VERSION=2.1.1",
       "-DDSPERATE_PGO=use",
+      "-DDSPERATE_PGO_STRICT=ON",
       "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ]
   },
   "pgo": {
     "dir": "standalone/pgo/aarch64",
-    "sha256": "205a6b1c8edf87d3d86af0ad75ed6ec5c534366327bdcd9377df705fe1dbf569",
-    "files": 96,
+    "sha256": "21fc16e1c70050224cec198bcb83c99fb7e93e03055b5eea7b8eb55fbe6aecd5",
+    "files": 98,
     "fingerprint": "e5053f2d1f5b27e9ed70bda94b614845979aa599",
     "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
-    "source_commit": "86bef065f93c55fc59c5ab5e93e06c812fcd7bf7",
-    "date": "2026-09-17T20:15Z",
+    "source_commit": "baec96501802bb04203cac07b420c67eff8054b8",
+    "date": "2026-09-21T19:55Z",
     "scenes": "mlbis sm64 etody dbori meteos gsdd nsmb",
-    "note": "Trained with this pak's own toolchain (Buildroot GCC 12.3.0) and flags so the fingerprint matches the release build; upstream's committed profile is for a different compiler and is refused. The headless frontend is the training build (the SDL frontend, rcheevos and the reference kernels are never trained). `st` is absent because the recorded save state is for another ROM revision. Verify with `-DDSPERATE_PGO_STRICT=ON`: 0 unexpected objects without a profile and 0 coverage mismatches."
+    "note": "Trained with this pak's toolchain and flags against the patched v2.1.1 tree, so the fingerprint matches the release build. The scenes are upstream's recorded replays; `st` was skipped because its save state is for another ROM revision, which the loader refuses. The headless frontend is the training build; the SDL frontend, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
+  },
+  "version": {
+    "tag": "v2.1.1",
+    "commit": "baec965",
+    "note": "Locked --version identity. The build exports DSPERATE_LOCK_VERSION and DSPERATE_LOCK_COMMIT, and cmake/version.cmake prefers them over git, so a source archive without git and a patched checkout git would call dirty both report v2.1.1 (baec965)."
   },
   "patches": [
     {
       "file": "0001-pak-cache-and-archive-policy.patch",
-      "sha256": "6605c5827c1b3c433817b504b1514e45e8e22c8c015aa4d4770dca11168a2d10",
-      "note": "Adds --cache-root-only, --single-rom and --inspect-cart, backed by cart.cache_root_only and cart.single_nds. The pak's wrapper pins the extraction cache to its own root, requires exactly one .nds entry, and sizes the cache before launch; the emulator also rejects unsafe entry paths. See PROVENANCE.md."
+      "sha256": "f2f130ffe23c804dc39d222fac008d0931fe3810452c109c30953625457221de",
+      "note": "Adds --cache-root-only, --single-rom and --inspect-cart, backed by cart.cache_root_only and cart.single_nds, plus unsafe entry-path rejection. Rebased onto v2.1.1, whose find_nds was renamed to find_rom and whose multi-entry pick now follows the game database; the policy features are still absent upstream, so they are carried. The pak's wrapper pins the extraction cache to its own root, requires exactly one image entry, and sizes the cache before launch. See PROVENANCE.md."
     },
     {
       "file": "0002-save-durability.patch",
@@ -58,6 +66,11 @@
       "file": "0003-lid-resume-no-fabricated-close.patch",
       "sha256": "d25a4566fb4dfa1bb53a83fb89bf91c5e66eef2bc618f4bbfd45b470f8b738ef",
       "note": "Stops the host-resume lid pulse on a device with no lid switch. The old code fabricated a lid close/open cycle on every resume; games that blank their screens on lid-close and restore them only on an open they saw coming (Contra 4) stayed black. The pulse now only fires for a lid already believed closed. See PROVENANCE.md."
+    },
+    {
+      "file": "0004-deterministic-version.patch",
+      "sha256": "fc2cdbf8b04abc2af4423f2bca6b9dfc31c83db3def752b3fa21317c36da9bec",
+      "note": "Makes --version report the lock's tag and commit deterministically. Upstream's generator derives the tag from git describe and the commit from git rev-parse, so a source archive without git says unknown and a patched checkout says <hash>-dirty. This patch prefers DSPERATE_LOCK_VERSION and DSPERATE_LOCK_COMMIT when the packager sets them, and leaves ordinary git development unchanged."
     }
   ],
   "toolchain": {
@@ -73,9 +86,9 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "a63ee1db30cf37de0b802217bedbd1cdd664855af350242d7235d0a347651646",
-    "size_bytes": 4378136,
-    "note": "Recorded after two clean FORCE=1 builds with the SDL Wayland define, all locked patches and the locked PGO profile agree. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "47062e7d368ef938921edb8145cb37ca008d19d95fda340e426942d812888d23",
+    "size_bytes": 4447768,
+    "note": "Recorded after two clean FORCE=1 PGO builds agree on the v2.1.1 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
     "file_name": "dsperate-notice",
