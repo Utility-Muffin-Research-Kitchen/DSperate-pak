@@ -21,21 +21,27 @@ clean clone with no sibling checkout.
 
 ## Status
 
-[DSperate 2.0.0](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.0.0)
-is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
-candidate updates the source pin to **DSperate v2.1.1** with five reviewed pak
-patches, the fifth being the Leaf RetroAchievements account adapter, and its
-runtime manifest now says `pak_version` `2.1.1`. It is host-verified only so
-far: two clean builds reproduce the profile-guided binary `87de031c...`, and so
-does a rebuild from the corresponding-source archive. The
-build runs with `DSPERATE_PGO_STRICT` and fails if a trained object loses its
-profile or a function no longer matches it. `--version` reports
-`v2.1.1 (baec965)` from both builds, and the pak ZIP and source archive are
-byte-for-byte reproducible. The account adapter replays the shared
-`standalone-ra-account-v1` fixtures and its fault tests on every check. Device
-requalification, including the performance measurement of the retrained
-profile and a native sign-in with this exact build, is pending, so no 2.1.1 pak
-is published.
+[DSperate 2.1.1](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.1.1)
+is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. It updates the
+source pin to **DSperate v2.1.1** with five reviewed pak patches, the fifth
+being the Leaf RetroAchievements account adapter: on Leaf 0.12.0-beta.6 or
+newer, DSperate signs in with the account saved in **Settings > Games >
+Accounts**, and an older Leaf leaves DSperate's own sign-in as it was.
+
+Two clean builds and a rebuild from the corresponding-source archive reproduce
+the profile-guided binary `87de031c...`, and the pak ZIP and source archive are
+byte-for-byte reproducible. The build runs with `DSPERATE_PGO_STRICT` and fails
+if a trained object loses its profile or a function no longer matches it.
+`--version` reports `v2.1.1 (baec965)`. The account adapter replays the shared
+`standalone-ra-account-v1` fixtures and its fault tests on every check.
+
+This exact build passed MLP1 device qualification from 2026-09-24 to
+2026-09-26: native sign-in and achievement set loading, a fresh account import
+and reuse across both SD cards, a rejected-token retry, account write faults
+with the required on-screen error, per-game disable, a retained sign-out, a
+changed password picked up on the next launch, controls, audio, suspend, and
+about 60 FPS in Contra 4. With DSperate removed, Leaf falls back to DraStic
+and keeps DSperate as the saved choice for when you reinstall it.
 
 The published 2.0.0 source pin was DSperate v2.0.0 with three reviewed pak
 patches. Two clean builds reproduce its binary, and wrapper, profile, archive
