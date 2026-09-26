@@ -1,0 +1,117 @@
+diff --git a/src/frontend/sdl/input.cpp b/src/frontend/sdl/input.cpp
+index 33699fa..f101945 100644
+--- a/src/frontend/sdl/input.cpp
++++ b/src/frontend/sdl/input.cpp
+@@ -85,9 +85,27 @@ const PadName kPadNames[] = {
+   {"dpright",       "RIGHT",      nullptr, nullptr},
+ };
+ 
++// Which of the two ways a pad may name x and y. SDL's own assumption, and
++// Xbox's, is that the names are places: x on the left of the diamond, y at the
++// top. The MLP1's mapping names them by the letter printed on the button
++// instead -- its SDL x is the X-labelled button, which sits at the top, and its
++// SDL y the Y-labelled one, on the left. Nothing about the binding changes: the
++// file stores SDL's name either way, and pad.x = x binds the same button. What
++// changes is which pip the menu draws for it, because a pip is a place, and a
++// row that points at the left button while the top one is bound is a row that
++// sends the player to the wrong button. Set from pad.xy_naming; position unless
++// the file says printed.
++static bool g_xy_by_printed = false;
++
+ // One token of a binding -- no "mod+", no chord, but the axis sign is part of
+ // the name ("+lefttrigger" is L2, "-lefttrigger" is not a thing any pad has).
+ std::string canon_pad_token(const std::string& s) {
++  // A compass alias names a place, so it follows the buttons: on a pad that
++  // names x and y by the printed letter, the button on the left is SDL y.
++  if (g_xy_by_printed) {
++    if (s == "west") return "y";
++    if (s == "north") return "x";
++  }
+   for (const PadName& p : kPadNames) {
+     if (s == p.sdl) return s;
+     if ((p.alias1 && s == p.alias1) || (p.alias2 && s == p.alias2)) return p.sdl;
+@@ -95,12 +113,22 @@ std::string canon_pad_token(const std::string& s) {
+   return s;   // not an alias: hand it to SDL unchanged, errors and all
+ }
+ 
+-const char* pad_token_label(const std::string& s) {
++const char* pad_token_label_sdl(const std::string& s) {
+   for (const PadName& p : kPadNames)
+     if (s == p.sdl) return p.label;
+   return nullptr;
+ }
+ 
++const char* pad_token_label(const std::string& s) {
++  // Taken from the other row rather than written twice, so the pip and the word
++  // a row draws cannot drift from the ones the table already has.
++  if (g_xy_by_printed) {
++    if (s == "x") return pad_token_label_sdl("y");
++    if (s == "y") return pad_token_label_sdl("x");
++  }
++  return pad_token_label_sdl(s);
++}
++
+ } // namespace
+ 
+ const char* action_name(Action a) { return kActionNames[static_cast<int>(a)]; }
+@@ -152,6 +180,15 @@ std::string Input::axis_remap_default(int i) {
+ }
+ 
+ void Input::configure(const Config& cfg) {
++  // First, because parse_pad resolves the compass aliases through it: a file
++  // written on a pad that names x and y by the printed letter has to read the
++  // same way the menu draws them.
++  {
++    const std::string xy = cfg.str("pad.xy_naming", "position");
++    g_xy_by_printed = xy == "printed";
++    if (xy != "position" && xy != "printed")
++      std::fprintf(stderr, "config: pad.xy_naming \"%s\" is not position | printed; keeping position\n", xy.c_str());
++  }
+   for (int i = 0; i < SDL_CONTROLLER_AXIS_MAX; ++i) {
+     const std::string v0 = cfg.str(axis_remap_key(i), axis_remap_default(i));
+     std::string v = v0;
+diff --git a/tests/input_test.cpp b/tests/input_test.cpp
+index b1c9fb0..983361b 100644
+--- a/tests/input_test.cpp
++++ b/tests/input_test.cpp
+@@ -300,6 +300,32 @@ void test_pad_labels() {
+   for (const auto& p : pairs) CHECK(Input::pad_label(p[0]) == Input::pad_label(p[1]));
+ }
+ 
++// The same pips on a pad that names x and y by the letter printed on the button
++// rather than by its place in the diamond -- the MLP1, whose SDL x is the
++// X-labelled button at the top and whose SDL y is the Y-labelled one on the
++// left. A row bound to SDL x has to point at the top button; left alone it
++// points at the left one, and the player presses a button that does nothing.
++void test_pad_labels_on_a_print_named_pad() {
++  Rig r; r.set("pad.xy_naming", "printed").go();
++  CHECK(Input::pad_label("x") == "\x04 NORTH");
++  CHECK(Input::pad_label("y") == "\x03 WEST");
++  CHECK(Input::pad_label("mod+x") == "MOD+\x04 NORTH");
++  // a and b are named by position on this pad too, so they do not move.
++  CHECK(Input::pad_label("a") == "\x01 SOUTH");
++  CHECK(Input::pad_label("b") == "\x02 EAST");
++  // A compass alias still names the button the pip points at.
++  CHECK(Input::pad_label("west") == "\x03 WEST");
++  CHECK(Input::pad_label("north") == "\x04 NORTH");
++  CHECK(Input::pad_label("west") == Input::pad_label("y"));
++  CHECK(Input::pad_label("north") == Input::pad_label("x"));
++  // And an unrecognised value is the old behaviour, said out loud.
++  Rig bad; bad.set("pad.xy_naming", "sideways").go();
++  CHECK(Input::pad_label("x") == "\x03 WEST");
++  Rig d; d.go();                                    // back to position, for the tests after this one
++  CHECK(Input::pad_label("x") == "\x03 WEST");
++  CHECK(Input::pad_label("y") == "\x04 NORTH");
++}
++
+ // The pen's tap button takes a second binding, pad.stylus_button.alt, and
+ // either one taps; releasing one while the other is held keeps the touch.
+ void test_stylus_tap_alt_binding() {
+@@ -458,6 +484,7 @@ int main() {
+   ds::sdl::test_stylus_axis_reads_the_stick();
+   ds::sdl::test_extra_defaults_match_configure();
+   ds::sdl::test_pad_labels();
++  ds::sdl::test_pad_labels_on_a_print_named_pad();
+   ds::sdl::test_stylus_tap_alt_binding();
+   ds::sdl::test_stick_face_buttons();
+   ds::sdl::test_stick_dpad_names_a_stick();

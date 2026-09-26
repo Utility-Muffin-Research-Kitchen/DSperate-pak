@@ -23,10 +23,14 @@ clean clone with no sibling checkout.
 
 [DSperate 2.0.0](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.0.0)
 is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. The next
-candidate updates the source pin to **DSperate v2.1.1** with five reviewed pak
-patches, the fifth being the Leaf RetroAchievements account adapter, and its
-runtime manifest now says `pak_version` `2.1.1`. It is host-verified only so
-far: two clean builds reproduce the profile-guided binary `87de031c...`, and so
+candidate updates the source pin to **DSperate v2.1.1** with 12 reviewed pak
+patches: the first five are the archive and cache policy, save durability, the
+lid/resume fix, a deterministic `--version` and the Leaf RetroAchievements
+account adapter, and the last seven add a Simplified Chinese menu (an embedded
+CJK face, the zh/en table, the drawing path, four rounds of rows that were
+still drawn in the wrong language, and the controls page's face-button pips).
+Its runtime manifest now says `pak_version` `2.1.1`. It is host-verified only
+so far: two clean builds reproduce the profile-guided binary `d95b0a56…`, and so
 does a rebuild from the corresponding-source archive. The
 build runs with `DSPERATE_PGO_STRICT` and fails if a trained object loses its
 profile or a function no longer matches it. `--version` reports
@@ -248,6 +252,26 @@ The MLP1 profile:
 The pause menu is driven with the DS buttons: A confirms, B backs out, and the
 d-pad moves.
 
+## Menu language
+
+DSperate's pause menu speaks English by default and can speak Simplified
+Chinese. Options > UI LANGUAGE switches it; the choice is written to
+`ui.language` in your global `dsperate.ini` and takes effect at once. It is
+deliberately not the console language: `[user] language` still decides the NDS
+firmware the games themselves boot in.
+
+Chinese rows are drawn with a WenQuanYi Micro Hei subset embedded in the
+binary, cut from the strings the menu can show, so no font file has to be on
+the card. Latin keeps the 5x7 grid it always had, which is why an English row
+is unchanged in width and in look, and the two scripts come out the same size
+on a row.
+
+The DS button names stay as they are printed on the console: A, B, X, Y, L, R,
+START, SELECT and the d-pad, and the value beside each is the same name. On the
+MLP1 the face buttons are named by the label printed on them, so the controls
+page's diamond pips follow the pad's own naming (`[pad] xy_naming = printed`)
+and the DS X row points at the button that is actually bound.
+
 ## Display
 
 Leaf runs under Weston on the MLP1. The wrapper starts DSperate as a single
@@ -273,6 +297,11 @@ coordinates are demonstrated on hardware during qualification.
 - Existing global configs are preserved on updates. Versioned migration handles
   the defaults this package has changed since its first test builds; it does not
   guess at values you set yourself.
+- The Chinese menu is covered by host tests -- every string paired in both
+  directions, a page-by-page check that no row is drawn in the wrong language,
+  and the CJK drawing path -- not by a device pass over every page. The
+  achievement status line's detail text is `standalone-ra-account-v1`'s own
+  wording and is left in English.
 - No bundled games, BIOS or firmware.
 
 ## Artwork

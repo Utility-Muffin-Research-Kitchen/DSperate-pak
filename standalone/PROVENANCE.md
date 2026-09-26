@@ -11,11 +11,11 @@ Everything here is measured from the build, not from memory.
 | Tag | `v2.1.1` |
 | Commit | `baec96501802bb04203cac07b420c67eff8054b8` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
-| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch` and `patches/0005-dsperate-ra-account-adapter.patch` (sha256-locked; see below) |
+| Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch`, `patches/0005-dsperate-ra-account-adapter.patch`, `patches/0006-chinese-localization.patch`, `patches/0007-zh-menu-and-ui-language.patch`, `patches/0008-cjk-drawing.patch`, `patches/0009-english-rows-through-tr-text.patch`, `patches/0010-rest-of-the-menu-in-the-set-language.patch`, `patches/0011-face-pips-that-follow-the-pad-own-naming.patch` and `patches/0012-achievement-status-in-the-set-language.patch` (sha256-locked; see below) |
 
 ## Patches
 
-The five patches are locked by sha256 in `upstream.lock.json`; the build
+The 12 patches are locked by sha256 in `upstream.lock.json`; the build
 applies them in order and refuses a patch whose hash differs.
 
 Reviewed against [upstream v2.1.1](https://github.com/beebono/DSperate/releases/tag/v2.1.1)
@@ -28,6 +28,13 @@ on 2026-09-21:
 | 0003 lid/resume | Keep. v2.1.1's lid implementation is unchanged and still fabricates a close on a device with no switch. |
 | 0004 deterministic `--version` | New. Prefers the lock's tag and commit over git so a source archive and a patched checkout report the same identity. |
 | 0005 Leaf account adapter | New. The `standalone-ra-account-v1` consumer; upstream has no equivalent. |
+| 0006 CJK face | New. A WenQuanYi Micro Hei subset and the text layer that draws it; no UI string is touched. |
+| 0007 Chinese menu and UI language | New. 199 zh/en pairs, the literals, and the `ui.language` switch that selects them. |
+| 0008 CJK drawing | New. Routes the drawing path through 0006's face, which is what makes a Chinese row readable. |
+| 0009 English rows through `tr_text` | New. The rows that format before they translate, so English mode stops drawing Chinese. |
+| 0010 Rest of the menu | New. Every remaining setting value and controls label, and three more places with 0009's ordering fault. |
+| 0011 Face pips | New. Points the controls page's diamond pips at the button the pad's own naming binds. |
+| 0012 Achievement status | New. The account page's status line, resolved before it is joined to a name or wrapped. |
 
 `standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
 archive policy.
@@ -98,6 +105,114 @@ snapshot before any helper runs and restores it only for the emulator's
 
 The cache-root and single-ROM policies default off. Unsafe archive entry
 names are rejected regardless of those flags.
+
+## Chinese (Simplified) menu
+
+Six patches add a second UI language and the face to draw it in. They are
+proposals to upstream as much as the rest of the series: nothing in them is
+reachable unless `ui.language` is set to `zh`, English is the default, and
+every English string the menu could draw before still draws byte for byte.
+
+`standalone/patches/0006-chinese-localization.patch` is the face, and nothing
+else: stb_truetype plus a WenQuanYi Micro Hei subset embedded in
+`font_cn_data.inc`, and a text layer (`next_char` becomes `next_codepoint`,
+`text_width` and `draw_text` route every code point through the face). The
+subset carries ASCII 0x20..0x7E as well as Han, so Latin is rasterised by the
+same face in the same 7px box as Han and the two scripts come out the same size
+on a row; Latin keeps the face's real advance plus one pixel of letter spacing,
+Han keeps the wide step, and the 5x7 bitmap is left only as the fallback for
+glyphs the face lacks -- the face-button pips. No UI string is touched: the menu
+this patch produces still says everything in English. The subset is built by
+`tools/make_menu_font.py`, whose SOURCES table records the package, the file and
+the SHA-256 of exactly the face used (Debian/Ubuntu `fonts-wqy-microhei`
+0.2.0-beta-3.1) -- the same face and version as the one already shipped under
+`src/core/io/dsi_font/`, so the font exception notice is that directory's.
+
+`standalone/patches/0007-zh-menu-and-ui-language.patch` is the Chinese and the
+switch that selects it, on top of 0006's face: `i18n.h` and `tr_data.inc` (199
+zh/en pairs) plus the literals themselves in `menu.cpp` and `settings.cpp`.
+`draw_text` and `text_width` resolve every string through `tr_text`, which is
+why a single setting flips the menu and both settings pages at once -- labels,
+notes, choice values and page titles -- with no per-string bookkeeping at the
+call sites. A new UI LANGUAGE row on the OPTIONS page toggles the `ui.language`
+config key live and persists it to `dsperate.ini`; it is deliberately distinct
+from `user.language`, which is the NDS firmware language games start in. The
+table is generated and no generator ships with the patch; the pair list in
+`tr_data.inc` is the source.
+
+`standalone/patches/0008-cjk-drawing.patch` wires 0006's face into the drawing
+path, which is what makes a Chinese row readable: `next_cp` decodes one code
+point, `next_char` folds it to the 5x7 grid's ASCII letter, and `text_width`
+and `draw_text` both take their step from `step_for`, so the measurement and
+the painting cannot disagree. `cjk_square` is the single hand-over between the
+two paths. `test_menu` links `cjk_font.cpp`, and two tests cover the regression
+that shipped: a carried code point measures a square and draws the face's glyph
+rather than the grid's `?`, and the pages draw with the language switched.
+
+`standalone/patches/0009-english-rows-through-tr-text.patch` sends the rows that
+format before they translate through the translation instead, which is the only
+way English mode stops drawing Chinese. `tr_text` matches `kTr` by `strcmp`,
+and the table holds the `snprintf` format, but what reached it after the values
+were filled in was the filled string, which no entry holds, so it came back
+unchanged and the row stayed Chinese. Now the format and both of its values go
+through `tr_text` before `snprintf`. The options page's widest-row measurement
+goes through it too: it measured the Chinese and drew the English, which is a
+panel too narrow for the row it holds.
+
+`standalone/patches/0010-rest-of-the-menu-in-the-set-language.patch` keys the
+rest of the menu's own text in the language the table resolves: the settings
+values that were still English in Chinese, the sentinels on fast forward and
+the picture-in-picture hold, and every label the Controls page puts on a row --
+the twenty hotkeys and the thirteen rows that are neither a hotkey nor a DS
+button. A DS button's own name is left alone: A, B, X, Y, L, R, START, SELECT
+and the d-pad are printed on the console, and the value beside each is the same
+name, so translating either side puts one word on both. The rest is 0009's
+ordering fault in the three places it was still there: a selected value drawn
+between arrows, a note wrapped on spaces, and the two halves of a disabled
+row's reason. Two rows are renamed (the slot page's title, and the root's slot
+row, which is keyed in Chinese so it stops turning back into SLOT), and the auto
+state's row is drawn only when there is an auto state to load or delete. The
+slot row is the one row `draw()` formats rather than takes whole, and in Chinese
+it is the longest line on the page: it did not fit the buffer, and `snprintf`
+cuts at a byte, so the row ended inside a character; the buffer is named now and
+held against the longest form by a `static_assert`.
+
+`standalone/patches/0011-face-pips-that-follow-the-pad-own-naming.patch`
+separates the two meanings of "x" on the MLP1 pad. The diamond pips on the
+controls page are places, and the pad's own mapping is not: the MLP1 names its
+face buttons by the letter printed on them, so its SDL `x` sits at the top of
+the diamond and its SDL `y` on the left, where SDL's own assumption -- and
+Xbox's, and the table's -- puts them the other way round. The bindings were
+already right (revision 4 of the defaults binds `pad.x = x` and `pad.y = y`);
+what pointed the wrong way was the picture beside the binding, and the compass
+alias a hand-written `west` or `north` resolves to. A `pad.xy_naming` key says
+which way the pad names them, `position` by default and `printed` on this pak,
+and the pip and the alias are taken from the other row when it is `printed`.
+The pak ships the key and migrates it as revision 5 of the defaults.
+
+`standalone/patches/0012-achievement-status-in-the-set-language.patch` does the
+same for the account page's status line, which 0005 rewrote. The page wraps
+that line to the panel, so what reaches `draw_text` is a fragment and never the
+whole sentence, and a name or a hash joined onto the end is no more an entry
+than a fragment is: the frontend now resolves each of the ten forms before it
+joins either and before the page cuts it. The ten pairs go into the table,
+including the managed-by-Leaf tag, in both the shape that ends a line and the
+one that starts it. What the bridge reports as its reason is left alone: that
+text is `standalone-ra-account-v1`'s own vocabulary, shared with Leaf and with
+the contract's fixtures, and a menu language is not the place to rename it.
+
+A leak check rides along with the drawing: with English set, a string carrying a
+Han character or a fullwidth form is one the table could not translate, so the
+player is about to read a row in the wrong language. A row drawn in the wrong
+language looks exactly like one drawn in the right one, so the drawing counts
+these when the tests arm the check, and the menu test walks every page -- by
+row, into the slot page, into delete mode and through every value every row can
+hold -- and requires zero. `standalone/check-upstream-text.py` reads the UI text
+out of a pristine upstream tree and compares it with
+`standalone/localization.baseline.tsv` (531 entries at the pinned commit), so an
+upstream release that adds or rewords screen text stops the pack with exit 3
+rather than shipping a string nobody translated; `make check-upstream` runs
+that alone and `standalone/repack.sh` runs it before a pack.
 
 `standalone/patches/0003-lid-resume-no-fabricated-close.patch` stops the
 host-resume lid pulse from fabricating a close on a device with no lid switch
@@ -192,7 +307,9 @@ the never-trained groups (the SDL frontend, rcheevos and the achievement code,
 the standalone tools, miniz, the reference kernels) has no profile, if any
 function's control flow no longer matches its profile, or if no strict warning
 appears at all. The current build reports 49 objects without a profile, all in
-those groups (the adapter's two new files among them), and 0 mismatches. The strict flags are warning switches only; the
+those groups (the adapter's two new files and the CJK face among them), and 0
+mismatches. The six localization patches touch only the SDL frontend and its
+tests, which are in those groups too, so the retrained profile stays valid. The strict flags are warning switches only; the
 binary is byte-identical to the non-strict build. `make test-pgo` checks,
 without a build or a device, that the profile directory, its MANIFEST and the
 build flags match the lock. Two clean `FORCE=1` builds with the locked profile
@@ -234,8 +351,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `87de031c4484830e3aaea5a8f1671afc77a78345dc6312b73c7f99e43517fafc` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,476,456 bytes | 14,224 bytes |
+| sha256 | `d95b0a56830c309bc170cef2114ef313813f5fa257a2f439da30fa9a7fb63b66` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 5,250,600 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
@@ -281,7 +398,7 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 The v2.0.0 release checks below are retained as history. The v2.1.1 candidate in
 this revision is host-verified only: the patched source builds with the retrained
-GCC 12.3.0 profile to `87de031c...`, two clean `FORCE=1` builds agree, the strict
+GCC 12.3.0 profile to `d95b0a56…`, two clean `FORCE=1` builds agree, the strict
 profile check passes, `--version` reports
 `v2.1.1 (baec965)` from the lock, and `make check`, `make dist-pakrat` and
 `make dist-source` pass (118 wrapper checks, 14 MLP1 profile checks, the

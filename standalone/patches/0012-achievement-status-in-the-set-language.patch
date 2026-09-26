@@ -1,0 +1,128 @@
+diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
+index 542e19e..e6339b5 100644
+--- a/src/frontend/sdl/main.cpp
++++ b/src/frontend/sdl/main.cpp
+@@ -3515,28 +3515,31 @@ sdl_ready:
+       sum = c->summary();
+     }
+     std::string status() const override {
+-      if (!c) return "NOT AVAILABLE IN THIS BUILD";
++      // Resolved here, before the value is joined to a name or a hash and
++      // before the page wraps it: tr_text matches a whole entry, and neither
++      // a half-joined line nor a wrapped fragment is one.
++      if (!c) return ds::sdl::tr_text("此构建不支持");
+       std::string base;
+       switch (c->state()) {
+       case ds::cheevos::State::Off:
+-        base = c->unavailable_reason().empty() ? "TURNED OFF" : c->unavailable_reason();
++        base = c->unavailable_reason().empty() ? ds::sdl::tr_text("已关闭") : c->unavailable_reason();
+         break;
+-      case ds::cheevos::State::SignedOut:   base = "NOT SIGNED IN"; break;
+-      case ds::cheevos::State::SigningIn:   base = "SIGNING IN..."; break;
+-      case ds::cheevos::State::SignedIn:    base = "SIGNED IN AS " + c->username(); break;
+-      case ds::cheevos::State::LoadingGame: base = "LOADING ACHIEVEMENTS..."; break;
+-      case ds::cheevos::State::Playing:     base = "SIGNED IN AS " + c->username(); break;
++      case ds::cheevos::State::SignedOut:   base = ds::sdl::tr_text("未登录"); break;
++      case ds::cheevos::State::SigningIn:   base = ds::sdl::tr_text("正在登录..."); break;
++      case ds::cheevos::State::SignedIn:    base = std::string(ds::sdl::tr_text("已登录为 ")) + c->username(); break;
++      case ds::cheevos::State::LoadingGame: base = ds::sdl::tr_text("正在加载成就..."); break;
++      case ds::cheevos::State::Playing:     base = std::string(ds::sdl::tr_text("已登录为 ")) + c->username(); break;
+       // The dump is recognised; the game simply has no set yet. Said plainly
+       // so nobody goes looking for a list that does not exist.
+       case ds::cheevos::State::EmptySet:
+-        base = "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
++        base = ds::sdl::tr_text("此游戏尚未发布成就");
+         break;
+       case ds::cheevos::State::NoSet:
+         // The hash is the actionable part: RetroAchievements identifies a dump,
+         // so a ROM from your own cart often is not one it knows even when the
+         // game has a set. With the hash the player can ask for theirs to be
+         // added; without it this line is a dead end.
+-        base = "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
++        base = std::string(ds::sdl::tr_text("此 ROM 没有成就 - HASH ")) + c->game_hash();
+         break;
+       }
+       // UMRK: say plainly that Leaf owns the account, so the missing manual
+@@ -3544,9 +3547,9 @@ sdl_ready:
+       if (ds::cheevos::ra_account::isManaged() || ds::cheevos::ra_account::isSuppressed()) {
+         const std::string why = ds::cheevos::ra_account::statusLine();
+         if (signed_in()) {
+-          base += " - MANAGED BY LEAF";
++          base += ds::sdl::tr_text(" - 由 Leaf 管理");
+         } else {
+-          base = "MANAGED BY LEAF";
++          base = ds::sdl::tr_text("由 Leaf 管理");
+           if (!why.empty()) base += " - " + why;
+         }
+       }
+diff --git a/src/frontend/sdl/tr_data.inc b/src/frontend/sdl/tr_data.inc
+index 73223a8..cb8db75 100644
+--- a/src/frontend/sdl/tr_data.inc
++++ b/src/frontend/sdl/tr_data.inc
+@@ -283,5 +283,15 @@ static const TrPair kTr[] = {
+   {"反向", "INV"},
+   {"L2 轴", "L2 AXIS"},
+   {"R2 轴", "R2 AXIS"},
++  {"此构建不支持", "NOT AVAILABLE IN THIS BUILD"},
++  {"已关闭", "TURNED OFF"},
++  {"未登录", "NOT SIGNED IN"},
++  {"正在登录...", "SIGNING IN..."},
++  {"已登录为 ", "SIGNED IN AS "},
++  {"正在加载成就...", "LOADING ACHIEVEMENTS..."},
++  {"此游戏尚未发布成就", "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET"},
++  {"此 ROM 没有成就 - HASH ", "NO ACHIEVEMENTS FOR THIS ROM - HASH "},
++  {"由 Leaf 管理", "MANAGED BY LEAF"},
++  {" - 由 Leaf 管理", " - MANAGED BY LEAF"},
+ };
+ static const int kTrN = static_cast<int>(sizeof(kTr) / sizeof(kTr[0]));
+diff --git a/tests/menu_test.cpp b/tests/menu_test.cpp
+index afbae88..0cc4a81 100644
+--- a/tests/menu_test.cpp
++++ b/tests/menu_test.cpp
+@@ -1779,6 +1779,38 @@ void test_the_refused_state_tag_has_both_languages() {
+   ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
+ }
+ 
++// The account page's status line: what the achievement client is doing, in the
++// words the player reads. It is built in the frontend, where a name or a hash
++// is joined onto it and the page then wraps it -- and neither a joined line nor
++// a wrapped fragment is an entry the table holds, so every one of these has to
++// be resolved before any of that, which is the whole reason they are here.
++void test_the_account_status_lines_have_both_languages() {
++  static const char* const kZh[] = {
++    "此构建不支持", "已关闭", "未登录", "正在登录...", "已登录为 ", "正在加载成就...",
++    "此游戏尚未发布成就", "此 ROM 没有成就 - HASH ", "由 Leaf 管理", " - 由 Leaf 管理",
++  };
++  static const char* const kEn[] = {
++    "NOT AVAILABLE IN THIS BUILD", "TURNED OFF", "NOT SIGNED IN", "SIGNING IN...", "SIGNED IN AS ",
++    "LOADING ACHIEVEMENTS...", "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET",
++    "NO ACHIEVEMENTS FOR THIS ROM - HASH ", "MANAGED BY LEAF", " - MANAGED BY LEAF",
++  };
++  constexpr int kN = static_cast<int>(sizeof(kZh) / sizeof(kZh[0]));
++  static_assert(sizeof(kZh) / sizeof(kZh[0]) == sizeof(kEn) / sizeof(kEn[0]),
++                "one English for every Chinese");
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
++  for (int i = 0; i < kN; ++i)
++    CHECK(std::strcmp(ds::sdl::tr_text(kZh[i]), kEn[i]) == 0);
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::Zh;
++  for (int i = 0; i < kN; ++i)
++    CHECK(std::strcmp(ds::sdl::tr_text(kEn[i]), kZh[i]) == 0);
++  // And it is resolved whole, before the name goes on: a name joined to a
++  // resolved line rides along in the line's language, which a line resolved
++  // after the join cannot do.
++  CHECK(std::string(ds::sdl::tr_text("已登录为 ")) + "yinheng" == "已登录为 yinheng");
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
++  CHECK(std::string(ds::sdl::tr_text("已登录为 ")) + "yinheng" == "SIGNED IN AS yinheng");
++}
++
+ // The auto state's row, only when there is an auto state to put on it. Empty it
+ // cannot be loaded -- there is nothing behind it -- and it cannot be deleted,
+ // so the row had nothing to say for itself but AUTO EMPTY, in a slot the
+@@ -1903,6 +1935,7 @@ int main() {
+   test_no_page_draws_chinese_with_english_set();
+   test_every_settings_string_has_an_english_entry();
+   test_the_refused_state_tag_has_both_languages();
++  test_the_account_status_lines_have_both_languages();
+   test_auto_row_shown_only_when_the_auto_state_exists();
+   std::printf("menu: ok\n");
+   return 0;
