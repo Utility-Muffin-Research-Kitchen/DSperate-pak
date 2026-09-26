@@ -375,7 +375,9 @@ if DEFAULTS_VERSION="$(read_version "$DEFAULTS_VERSION_FILE")"; then
         # Revision 2 added the Menu binding. Revision 3 moved the stylus to the
         # one stick the MLP1 has and added its tap buttons. Revision 4 binds the
         # face X/Y buttons explicitly, because the MLP1 pad's SDL mapping names
-        # them by printed label and the stock defaults swapped them.
+        # them by printed label and the stock defaults swapped them. Revision 5
+        # tells the emulator the same thing, so the Controls page points its
+        # diamond pips at the button that is actually bound.
         if [ "$INSTALLED_VERSION" -lt 2 ]; then
             cfg_ensure_key "$GLOBAL_INI" padhotkeys pause.alt guide || die "cannot migrate global config"
         fi
@@ -390,6 +392,9 @@ if DEFAULTS_VERSION="$(read_version "$DEFAULTS_VERSION_FILE")"; then
         if [ "$INSTALLED_VERSION" -lt 4 ]; then
             cfg_ensure_key "$GLOBAL_INI" pad x x || die "cannot migrate global config"
             cfg_ensure_key "$GLOBAL_INI" pad y y || die "cannot migrate global config"
+        fi
+        if [ "$INSTALLED_VERSION" -lt 5 ]; then
+            cfg_ensure_key "$GLOBAL_INI" pad xy_naming printed || die "cannot migrate global config"
         fi
         record_defaults_version "$DEFAULTS_VERSION" || die "cannot record the defaults version"
         log "defaults migration: $INSTALLED_VERSION -> $DEFAULTS_VERSION"
