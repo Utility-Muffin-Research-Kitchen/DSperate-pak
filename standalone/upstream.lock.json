@@ -76,6 +76,41 @@
       "file": "0005-dsperate-ra-account-adapter.patch",
       "sha256": "7328bde126c95467bac7989e5beb6ff31314d0ccafd8e1b954448c9b1ab79568",
       "note": "The standalone-ra-account-v1 consumer. Adds the shared contract classifier and marker (verbatim with the Flycast consumer and the leaf-contracts reference), the managed-account bridge with its own checked token writer (same-directory temporary, write, fsync, close, rename, each checked; the revision is accepted only after it), and the native login wiring (import, one password retry, sign-out). Captures and scrubs UMRK_RA_ACCOUNT_* at startup; an explicit cheevos.enabled = false or --no-cheevos wins over a managed account; bridge failures reach the native pop-up path even with toasts off; an unmanaged sign-in stays session-only as upstream. Never writes a password or token to a log or argv."
+    },
+    {
+      "file": "0006-chinese-localization.patch",
+      "sha256": "1e65c1be2a31bea524667c352da131a5e8e1fc6972fba885b26fa8e48c8209b8",
+      "note": "The CJK face, and nothing else: stb_truetype plus a WenQuanYi Micro Hei subset embedded in font_cn_data.inc, and a text layer (next_char -> next_codepoint, text_width, draw_text) that routes every code point through it. The subset carries ASCII 0x20..0x7E as well as Han, so Latin is rasterised by the same face in the same 7px box as Han and the two scripts come out the same size on a row; Latin keeps its real hmtx advance (plus one pixel of letter spacing) and a baseline taken from the face's ascent, Han keeps the wide step, and the 5x7 bitmap is left only as a fallback for glyphs the face lacks (the face-button pips). No UI string is touched: the menu this patch produces still says everything in English. The subset is built by tools/make_menu_font.py, whose SOURCES table records the package, the file and the SHA-256 of exactly the face used (Debian/Ubuntu fonts-wqy-microhei 0.2.0-beta-3.1, 2420e807...) -- the same face and version as the one already shipped under src/core/io/dsi_font/, so the font exception notice is that directory's. Rebased onto v2.1.1; deliberately excludes main-only save-state reset/delete/auto-slot. Splittable: 0007 is the other half."
+    },
+    {
+      "file": "0007-zh-menu-and-ui-language.patch",
+      "sha256": "456cb66114ea2e4582f8bafef3bd27433304756ae99749a1cfb3c5181c9b14b1",
+      "note": "The Chinese, and the switch that selects it, on top of 0006's face. i18n.h and tr_data.inc (199 zh<->en pairs) plus the literals themselves in menu.cpp and settings.cpp: draw_text and text_width resolve every string through tr_text, which is why a single setting flips the menu and both settings pages at once -- labels, notes, choice values and page titles -- with no per-string bookkeeping at the call sites. A new UI LANGUAGE / 界面语言 row on the OPTIONS page toggles the ui.language config key live (persisted to dsperate.ini), distinct from user.language, which is the NDS firmware language games start in; English is the default. Rebased onto v2.1.1, which is where the twelve strings this patch adds come from -- ACCURATE and ENHANCED, DELETE STATE, SURE? and the \\x03 DELETE / \\x03 DONE confirmations, DSI NAND LINKS, SCREEN GAP with its note, RESET and AUTO %s -- while the two v2.0.0 strings upstream dropped (NAND DSIWARE SHORTCUTS, SMOOTH 3D EDGES AS THE HARDWARE DID. OFF IS CHEAPER) are dropped from the table. The table is generated, and no generator ships with the patch: the pair list is in tr_data.inc and extends tr_text. It also carries the three hunks that keep upstream's own menu test true of a localized tree: tr_text moved out of menu.cpp's anonymous namespace so i18n.h can declare it; the test's assertions resolved through it, both the label field and the values display_value names, since the row paints the resolved text and not the literal the table holds; and the test's two walks down the OPTIONS page widened by the language row. Tests only: the shipped dsperate target does not compile tests/, so the artifact is what the unmodified four files produce."
+    },
+    {
+      "file": "0008-cjk-drawing.patch",
+      "sha256": "a0c6e76c89216edf523daa6689d2e8b8fdc3497b5a1b86f7a6c1f22cbe220ee2",
+      "note": "Wires 0006's face into the drawing path, which is what makes a Chinese row readable. next_cp decodes one code point; next_char folds it to the 5x7 grid's ASCII letter and no longer steps along itself; text_width and draw_text both take their step from step_for, so the measurement and the painting cannot disagree. cjk_square is the single hand-over between the two paths: the subset carries Latin too (it was cut from the strings the menu draws, ASCII included), but a Latin letter keeps the grid's own glyph and advance, so an English line is unchanged in width and in look. The subset is regenerated against the current strings, adding the full-width question mark the delete confirmation asks with, the one glyph it lacked; because that new cmap entry shifts the face's tables, this patch rewrites font_cn_data.inc wholesale. test_menu links cjk_font.cpp, and two tests cover the regression that shipped: a carried code point measures a square and draws the face's glyph rather than the grid's '?', and the pages draw with the language switched."
+    },
+    {
+      "file": "0009-english-rows-through-tr-text.patch",
+      "sha256": "dee71c5028d5621408e550280166c5f202e0176dc7ba64e634cdfa1d09d7cd85",
+      "note": "Sends the rows that format before they translate through the translation instead, which is the only way English mode stops drawing Chinese. tr_text matches kTr by strcmp, and the table holds the snprintf format -- \"金手指  已启用 %zu 条\", \"游戏  %d\", \"成就  %d/%d\", \"保存到 < %s >\", \"自动 %s\" -- but what reached it after the values were filled in was the filled string, which no entry holds, so it came back unchanged and the row stayed Chinese. Now the format and both of its values go through tr_text before snprintf, the way the controls row always did. The options page's widest-row measurement goes through it too: it measured the Chinese and drew the English, which is a panel too narrow for the row it holds. A leak count rides along for the same reason these were not caught before -- a row drawn in the wrong language looks exactly like a row drawn in the right one, so the drawing counts them when the tests arm the check, and the test walks every page and requires zero."
+    },
+    {
+      "file": "0010-rest-of-the-menu-in-the-set-language.patch",
+      "sha256": "f988d4079a07af9b2977d01ad67d8bede9265b7c8beedb78d6edf341a00f3727",
+      "note": "The rest of the menu's own text, keyed in the language the table resolves: the settings values that were still English in Chinese (CONSOLE (59.8), UNLIMITED, FIRST, the sixteen firmware colours, the five months that were still JANUARY..MAY) and the sentinels on fast forward and the picture-in-picture hold, plus every label the Controls page puts on a row -- the twenty hotkeys and the thirteen rows that are neither a hotkey nor a DS button. A DS button's own name is left alone: A, B, X, Y, L, R, START, SELECT and the d-pad are printed on the console, and the value beside each is the same name, so translating either side puts one word on both.\nThe rest is the same ordering fault 0009 fixed, in the three places it was still there. A selected value is drawn between arrows, and \"< 关 >\" is not an entry, so a row read right until it was picked; it is resolved now before the arrows join it. A note is wrapped on spaces, and it was wrapped first and translated a piece at a time, so every fragment missed the table; it is resolved now before it is cut, which is also the width it is measured in. The same for the two halves of a disabled row's reason.\nTwo rows are renamed: the slot page's title reads 存档状态, and the root's slot row is keyed in Chinese so it stops turning back into SLOT when the slot is changed. And the auto state's row is drawn only when there is an auto state: empty it can be neither loaded nor deleted, so all it ever said was AUTO EMPTY, in a cell the player never made.\nTwo tests go with it. The walk that counted leaks was reaching no page at all -- it pressed until something happened, and the row it needed was one it never landed on -- so it walks by row now, into the slot page, into delete mode, and through every row of every page Options opens, stepping each one through every value it can hold. A second test asks the table about every string in the four settings tables instead of looking at the row, which is the only way to see the other direction: a value left in English is one the player reads in English with Chinese set, and on screen it is what a name like WIIMMFI looks like too.\nThe slot row is the one row draw() formats rather than takes whole, and in Chinese it is the longest line on the page: it did not fit the buffer it was formatted into, and snprintf cuts at a byte, so the row ended inside 绝 with a byte the drawing cannot decode. The buffer is named now and held against the longest form by a static_assert. The refused-state tag that goes into that row arrives from the emulator as the config value REJECTED and had no other half, so with Chinese set the row read 存档槽 < 0 > REJECTED: a Chinese line with an English word in it, on a page no walk reaches because the notice is only set after a state has been refused. A third test holds that pair."
+    },
+    {
+      "file": "0011-face-pips-that-follow-the-pad-own-naming.patch",
+      "sha256": "4d6704cfe5b189798c40b20e32b192c663dbe41ab915cf369a1852cb0bdb3c85",
+      "note": "The diamond pips on the controls page are places, and the pad's own mapping is not: the MLP1 names its face x and y by the letter printed on the button, so its SDL x sits at the top of the diamond and its SDL y on the left, where SDL's own assumption -- and Xbox's, and the table's -- puts them the other way round. The bindings were already right: revision 4 of the defaults binds pad.x = x and pad.y = y, and A and B never needed it. What pointed the wrong way was the picture beside the binding -- the row for DS X drew the left pip while the top button did the work, and the two hotkeys that ship bound to mod+x and mod+y did the same. A pad.xy_naming key says which way the pad names them, position by default and printed on this pak, and the pip and the compass alias are taken from the other row when it is printed, so a hand-written west still lands on the button the pip points at. A test walks both namings, and the pak ships the key and migrates it as revision 5."
+    },
+    {
+      "file": "0012-achievement-status-in-the-set-language.patch",
+      "sha256": "08f3b10a1619301958cbe56ef4ecc59edd2c5983bf488cabbbd58ce870b16ec6",
+      "note": "The account page's one sentence, in the language the menu is set to. The page asks the frontend what the achievement client is doing -- turned off, not signed in, signing in, signed in as a name, loading a set, a game with no set published yet, a dump RetroAchievements does not know with the hash that lets the player ask for it -- and then wraps it to the panel, so what reaches draw_text is a piece of the line and never the whole one, and a name or a hash joined onto the end is no more an entry than a wrapped fragment is. The frontend resolves each form before it joins either, and before the page cuts it, which is the ordering the menu's own rows were given; the ten pairs go into the table, including the managed-by-Leaf tag the account adapter added, in both the shape that ends a line and the one that starts it. A test asks the table for all ten in both directions, and asks for a name joined after the resolution rather than before it."
     }
   ],
   "toolchain": {
@@ -91,9 +126,9 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "87de031c4484830e3aaea5a8f1671afc77a78345dc6312b73c7f99e43517fafc",
-    "size_bytes": 4476456,
-    "note": "Recorded after two clean FORCE=1 PGO builds agree on the v2.1.1 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
+    "sha256": "d95b0a56830c309bc170cef2114ef313813f5fa257a2f439da30fa9a7fb63b66",
+    "size_bytes": 5250600,
+    "note": "Recorded after two clean FORCE=1 builds of v2.1.1 with SOURCE_DATE_EPOCH pinned and every input locked (patches 0001..0012, the retrained PGO profile). The binary embeds the WenQuanYi Micro Hei subset from the recorded Debian package and draws the CJK blocks through it (0006); Latin keeps the 5x7 grid and every row goes through tr_text before it is drawn (0007, 0009); every string the menu can paint is keyed in the language the table resolves, including the achievement status line the account page wraps (0008, 0010, 0012); and the face-button pips follow the pad's own naming of x and y (0011). CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
     "file_name": "dsperate-notice",
@@ -103,5 +138,14 @@
     "license": "MIT (this repository)",
     "link": "libSDL2-2.0.so.0 and libSDL2_ttf-2.0.so.0, both device-provided; no bundled libraries or fonts",
     "note": "The pak's own fullscreen message program. Built in the same pinned image and verified with the same allowlist. Recorded after two clean FORCE=1 builds agree."
+  },
+  "localization": {
+    "scanner": 1,
+    "baseline_file": "standalone/localization.baseline.tsv",
+    "baseline_commit": "baec96501802bb04203cac07b420c67eff8054b8",
+    "baseline_tag": "v2.1.1",
+    "fingerprint": "b7c405a332fb44694da40a6d38e6b52db6024ca623ccc3dc68737d58bc2d47e0",
+    "entries": 531,
+    "note": "The menu's UI text at the pinned commit, as check-upstream-text.py reads it. repack.sh re-reads the same files out of the newest upstream tag and stops with exit 3 on anything the localization does not cover, so a pack never ships a string nobody translated."
   }
 }
