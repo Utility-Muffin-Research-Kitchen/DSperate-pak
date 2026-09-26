@@ -1,0 +1,797 @@
+diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
+index 3ed8f83..eb1b2e5 100644
+--- a/src/frontend/sdl/main.cpp
++++ b/src/frontend/sdl/main.cpp
+@@ -38,6 +38,7 @@
+ #include "input.h"
+ #include "lid.h"
+ #include "loader_cart.h"
++#include "i18n.h"
+ #include "menu.h"
+ #include "cpu_gov.h"
+ #include "pacer.h"
+@@ -1074,28 +1075,47 @@ bool open_displays(const VideoSetup& vs, ds::sdl::Display& display, ds::sdl::Dis
+   return display.open("DSperate", vs.scale, vs.fullscreen, vs.linear, vs.vsync, vs.layout);
+ }
+ 
++// What a hotkey row is called, in the order Input lists the actions. An
++// action's own name is the config key and stays English; this is the row's
++// wording, and the table carries the other language.
++//
++// A DS button's row is not here. A, B, X, Y, L, R, START, SELECT and the d-pad
++// are the names printed on the console, the same in every language -- and the
++// value beside each is the same name as the key bound to it, so translating
++// either side would put one word on both and say nothing.
++constexpr const char* const kActionLabels[static_cast<int>(ds::sdl::Action::Count)] = {
++  "退出", "暂停游戏", "快进", "快进开关", "保存存档", "读取存档", "下个槽位", "上个槽位",
++  "音量+", "音量-", "静音", "下个布局", "上个布局", "交换屏幕", "小窗位置", "全屏", "截图",
++  "合盖", "麦克风", "帧数",
++};
++static_assert(sizeof(kActionLabels) / sizeof(kActionLabels[0]) == static_cast<int>(ds::sdl::Action::Count),
++              "one label for every hotkey");
++
+ // The Controls page's rows that are neither a DS button nor a hotkey: the
+ // modifier a pad chord is built on, and the pen's tap button and stick. The
+ // modifier exists in both columns; the pen is the pad's, so its two rows are
+ // only offered there.
++// A row's label is written in the menu's own language and the table carries
++// the other one: the key beside it is the config file's, and that stays as it
++// is however the row reads.
+ struct Extra { const char* key_keys; const char* key_pad; const char* label; };
+ constexpr Extra kExtras[] = {
+-  {"hotkeys.modifier", "padhotkeys.modifier", "MODIFIER"},
+-  {nullptr,            "pad.stylus_button",   "STYLUS TAP"},
+-  {nullptr,            "pad.stylus_button.alt", "STYLUS TAP (2)"},
+-  {nullptr,            "pad.stylus_axis",     "STYLUS STICK"},
+-  {nullptr,            "pad.stylus_dpad",     "STYLUS DPAD"},
+-  {nullptr,            "pad.stick_dpad",      "STICK DPAD"},
+-  {nullptr,            "pad.stick_face",      "STICK ABXY"},
++  {"hotkeys.modifier", "padhotkeys.modifier", "修饰键"},
++  {nullptr,            "pad.stylus_button",   "触摸笔"},
++  {nullptr,            "pad.stylus_button.alt", "触摸笔 (2)"},
++  {nullptr,            "pad.stylus_axis",     "触摸笔摇杆"},
++  {nullptr,            "pad.stylus_dpad",     "触摸笔方向键"},
++  {nullptr,            "pad.stick_dpad",      "摇杆方向键"},
++  {nullptr,            "pad.stick_face",      "摇杆按键"},
+   // Axis remapping: each row is set by pushing the control the way that axis
+   // reads positive -- a stick right for X, down for Y, a trigger pressed --
+   // and stores the physical axis that went, inverted if it went negative.
+-  {nullptr,            "pad.axis_leftx",      "L STICK RIGHT"},
+-  {nullptr,            "pad.axis_lefty",      "L STICK DOWN"},
+-  {nullptr,            "pad.axis_rightx",     "R STICK RIGHT"},
+-  {nullptr,            "pad.axis_righty",     "R STICK DOWN"},
+-  {nullptr,            "pad.axis_lefttrigger", "L2 AXIS"},
+-  {nullptr,            "pad.axis_righttrigger", "R2 AXIS"},
++  {nullptr,            "pad.axis_leftx",      "左摇杆 右"},
++  {nullptr,            "pad.axis_lefty",      "左摇杆 下"},
++  {nullptr,            "pad.axis_rightx",     "右摇杆 右"},
++  {nullptr,            "pad.axis_righty",     "右摇杆 下"},
++  {nullptr,            "pad.axis_lefttrigger", "L2 轴"},
++  {nullptr,            "pad.axis_righttrigger", "R2 轴"},
+ };
+ // The rows that hold a stick rather than a control: a captured axis is
+ // stored as the stick it belongs to, and the value reads as one.
+@@ -1103,13 +1123,21 @@ bool extra_is_stick(const char* key) { return std::strcmp(key, "pad.stylus_axis"
+ bool extra_is_axis_remap(const char* key) { return std::strncmp(key, "pad.axis_", 9) == 0; }
+ // "-righty" as the page reads it: which physical control, and whether it runs backwards.
+ std::string axis_remap_label(const std::string& v0) {
+-  if (v0 == "none") return "NONE";
++  // The stick's name is a word and goes into the table; "L2"/"R2" are printed
++  // on the console and stay as they are. "反向" is joined after the stick has
++  // been resolved, for the reason the hotkey rows' " (2)" is: the joined
++  // string is not an entry, so each half has to reach the table on its own.
++  if (v0 == "none") return ds::sdl::tr_text("无");
+   const bool inv = !v0.empty() && v0[0] == '-';
+   const std::string v = !v0.empty() && (v0[0] == '-' || v0[0] == '+') ? v0.substr(1) : v0;
+-  std::string n = v == "leftx" ? "L STICK X" : v == "lefty" ? "L STICK Y" : v == "rightx" ? "R STICK X" : v == "righty" ? "R STICK Y"
+-                : v == "lefttrigger" ? "L2" : v == "righttrigger" ? "R2" : v;
+-  for (char& ch : n) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+-  return inv ? n + " INV" : n;
++  const bool known = v == "leftx" || v == "lefty" || v == "rightx" || v == "righty" || v == "lefttrigger" || v == "righttrigger";
++  const char* n = v == "leftx" ? "左摇杆 X" : v == "lefty" ? "左摇杆 Y" : v == "rightx" ? "右摇杆 X" : v == "righty" ? "右摇杆 Y"
++                : v == "lefttrigger" ? "L2" : v == "righttrigger" ? "R2" : v.c_str();
++  std::string out = ds::sdl::tr_text(n);
++  // A name the table has never heard is a file's own spelling, shown as it
++  // stands -- upper-cased because the font has no lower case.
++  if (!known) for (char& ch : out) ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
++  return inv ? out + " " + ds::sdl::tr_text("反向") : out;
+ }
+ bool extra_in_column(const Extra& e, bool pad) { return pad || e.key_keys; }
+ int extra_count(bool pad) {
+@@ -2731,8 +2759,11 @@ sdl_ready:
+       // A stick, not an axis: that row names the stick the pen follows, or
+       // the one that works the face buttons.
+       if (extra_is_axis_remap(key)) return axis_remap_label(v);
++      // Resolved here, the way a hotkey row's label is: these are the row's
++      // wording, not the file's, and the file keeps "left"/"right" whatever
++      // the page reads.
+       if (extra_is_stick(key))   // true/false: stick_dpad's old spellings (Input::parse_stick)
+-        return v == "left" || v == "true" || v == "1" ? "LEFT STICK" : v == "right" ? "RIGHT STICK" : "NONE";
++        return ds::sdl::tr_text(v == "left" || v == "true" || v == "1" ? "左摇杆" : v == "right" ? "右摇杆" : "无");
+       return pad ? ds::sdl::Input::pad_label(v) : upper(v);
+     }
+ 
+@@ -2762,7 +2793,10 @@ sdl_ready:
+         }
+         const char* name = ds::sdl::action_name(static_cast<ds::sdl::Action>(a));
+         out.key = (pad ? "padhotkeys." : "hotkeys.") + std::string(name) + ds::sdl::Input::hot_suffix(slot);
+-        out.label = upper(name) + (slot ? " (2)" : "");
++        // Resolved here rather than left to the drawing: a second slot's row
++        // carries a " (2)" the table has never heard of, so the label has to
++        // reach the table before the suffix joins it.
++        out.label = std::string(ds::sdl::tr_text(kActionLabels[a])) + (slot ? " (2)" : "");
+         out.value = hot_value(pad, a, slot);
+       }
+       // The file writes SDL's names in lower case; the page reads better in
+@@ -2857,7 +2891,7 @@ sdl_ready:
+     bool user_in_firmware() const { return !nds.firmware_synthetic; }
+ 
+     const char* user_settings_note() const override {
+-      return user_in_firmware() ? "IN THE FIRMWARE" : nullptr;
++      return user_in_firmware() ? "保存在固件中" : nullptr;
+     }
+ 
+     static bool is_user_key(const char* key) { return std::strncmp(key, "user.", 5) == 0; }
+@@ -2951,50 +2985,50 @@ sdl_ready:
+         // Frameskip itself is forced to 0 for a session, so its mode is moot
+         // there too -- and the config may still say otherwise, which is what
+         // this test would read.
+-        if (net_live && *net_live) return "NOT DURING A NETWORK SESSION";
+-        return cfg.num("emu.frameskip", 0) > 0 ? "" : "ONLY WITH FRAMESKIP ON";
++        if (net_live && *net_live) return "联网会话中不可用";
++        return cfg.num("emu.frameskip", 0) > 0 ? "" : "仅在开启跳帧后";
+       case ds::sdl::Dep::PanelEffects:
+-        return panel_effects() ? "" : "THIS SCREEN SCALES IN HARDWARE";
++        return panel_effects() ? "" : "此屏幕由硬件缩放";
+       case ds::sdl::Dep::GridSeam:
+-        if (!panel_effects()) return "THIS SCREEN SCALES IN HARDWARE";
+-        return flag("video.linear", false) ? "BILINEAR IS ON" : "";
++        if (!panel_effects()) return "此屏幕由硬件缩放";
++        return flag("video.linear", false) ? "线性过滤已开启" : "";
+       case ds::sdl::Dep::Chunky:
+-        return flag("video.linear", false) ? "BILINEAR IS ON" : "";
++        return flag("video.linear", false) ? "线性过滤已开启" : "";
+       case ds::sdl::Dep::ChunkyCell:
+-        if (flag("video.linear", false)) return "BILINEAR IS ON";
+-        return cfg.str("video.chunky", "false") == "false" ? "ONLY WITH CHUNKY ON" : "";
++        if (flag("video.linear", false)) return "线性过滤已开启";
++        return cfg.str("video.chunky", "false") == "false" ? "仅在开启像素块后" : "";
+       case ds::sdl::Dep::Windowed:
+         // A tier that owns the panel is already filling it; there is no
+         // window to make bigger.
+-        return display.scaling() && !display.window() ? "THIS SCREEN IS ALWAYS FULL" : "";
++        return display.scaling() && !display.window() ? "此屏幕始终全屏" : "";
+       case ds::sdl::Dep::OneWindow:
+         // Two windows show one screen each; there is nothing to lay out.
+-        return vs.dual_window ? "NOT WITH TWO WINDOWS" : "";
++        return vs.dual_window ? "双窗口下不可用" : "";
+       case ds::sdl::Dep::Pip:
+-        return pip ? "" : "PIP LAYOUT ONLY";
++        return pip ? "" : "仅画中画布局";
+       case ds::sdl::Dep::PipTouchHold:
+-        if (!pip) return "PIP LAYOUT ONLY";
+-        return l.pip_alpha < 1.0 ? "" : "ONLY WHEN THE PIP FADES";
++        if (!pip) return "仅画中画布局";
++        return l.pip_alpha < 1.0 ? "" : "仅在小窗口会淡出时";
+       case ds::sdl::Dep::Dominant:
+-        return dominant ? "" : "DOMINANT LAYOUTS ONLY";
++        return dominant ? "" : "仅主次布局";
+       case ds::sdl::Dep::DominantThreshold:
+-        if (!dominant) return "DOMINANT LAYOUTS ONLY";
+-        return cfg.str("video.dominant_ratio", "auto") == "auto" ? "" : "ONLY WHEN THE RATIO IS AUTO";
++        if (!dominant) return "仅主次布局";
++        return cfg.str("video.dominant_ratio", "auto") == "auto" ? "" : "仅比例为自动时";
+       case ds::sdl::Dep::Net:
+ #if DSPERATE_NET
+         return "";
+ #else
+-        return "THIS BUILD HAS NO NETWORKING";
++        return "此构建未含网络功能";
+ #endif
+       case ds::sdl::Dep::NetInternet:
+         // Reads the config, not the session: the row is restart-only, so what
+         // it hangs off is the value being edited above it, not what this run
+         // happens to be doing.
+-        return cfg.str("net.mode", "off") == "internet" ? "" : "ONLY WITH NETWORK FEATURES ON INTERNET";
++        return cfg.str("net.mode", "off") == "internet" ? "" : "仅网络功能为互联网时";
+       case ds::sdl::Dep::NetSession:
+-        return (net_live && *net_live) ? "NOT DURING A NETWORK SESSION" : "";
++        return (net_live && *net_live) ? "联网会话中不可用" : "";
+       case ds::sdl::Dep::ShortcutsPath:
+-        return shortcuts_dir(cfg).empty() ? "NEEDS PATHS.DSI_SHORTCUTS OR PATHS.GAMES" : "";
++        return shortcuts_dir(cfg).empty() ? "需要 PATHS.DSI_SHORTCUTS 或 PATHS.GAMES" : "";
+       }
+       return "";
+     }
+diff --git a/src/frontend/sdl/menu.cpp b/src/frontend/sdl/menu.cpp
+index a1109d4..0926ecf 100644
+--- a/src/frontend/sdl/menu.cpp
++++ b/src/frontend/sdl/menu.cpp
+@@ -615,7 +615,12 @@ Menu::Result Menu::handle(u32 presses) {
+     {
+       int col = slot_row_ == kAutoSlot ? 0 : slot_row_ / kSlotRows;
+       int r = slot_row_ == kAutoSlot ? kSlotRows : slot_row_ % kSlotRows;
+-      const int len = kSlotRows + (slot_delete_ ? 1 : 0);
++      // The auto state's row is here to be deleted, not to be picked -- it is
++      // the state the emulator writes on its own, so a player choosing a slot
++      // has no business landing on it. So the column is a cell longer in delete
++      // mode, and then only when there is an auto state to put in the cell:
++      // an empty one is a row the player can neither load nor delete.
++      const int len = kSlotRows + (slot_delete_ && used_[kAutoSlot] ? 1 : 0);
+       if (hit(B::BTN_UP))   r = (r + len - 1) % len;
+       if (hit(B::BTN_DOWN)) r = (r + 1) % len;
+       if ((hit(B::BTN_LEFT) || hit(B::BTN_RIGHT)) && r < kSlotRows) col ^= 1;
+@@ -693,8 +698,14 @@ Menu::Result Menu::handle(u32 presses) {
+ // it is rather than running under the panel edge.
+ namespace {
+ std::string fit(const std::string& text, int scale, int width_px) {
+-  if (text_width(scale, text.c_str()) <= width_px) return text;
+-  std::string out = text;
++  // Cut in the language being drawn, for the same reason the note is wrapped
++  // in it: the table answers for a whole string, so a row shortened in one
++  // language and then handed to the table is a row every shortening of which
++  // misses it -- a row shortened to three Han characters and an ellipsis is
++  // not an entry either, and it comes out in Chinese with English set. What is
++  // measured is what goes on the canvas either way.
++  std::string out = tr_text(text.c_str());
++  if (text_width(scale, out.c_str()) <= width_px) return out;
+   while (!out.empty() && text_width(scale, (out + "...").c_str()) > width_px) pop_char(out);
+   return out + "...";
+ }
+@@ -1303,8 +1314,16 @@ void Menu::draw_options(const Canvas& d) const {
+       // The language row carries its value on the right of the same row, so it
+       // is wider than its label. Measure both languages' values and keep the
+       // longer: the panel must not change width when the row is toggled.
+-      if (i == kOptionPages - 1)
+-        row += std::max(text_width(mm.s, "< English >"), text_width(mm.s, "< 中文 >")) + 3 * mm.s;
++      if (i == kOptionPages - 1) {
++        // Both values, each measured in the language being drawn rather than
++        // in the one it names: the panel must not change width when the row is
++        // toggled, and a width taken from the Chinese would leave the English
++        // one no room.
++        char probe[2][32];
++        std::snprintf(probe[0], sizeof probe[0], "< %s >", tr_text("English"));
++        std::snprintf(probe[1], sizeof probe[1], "< %s >", tr_text("中文"));
++        row += std::max(text_width(mm.s, probe[0]), text_width(mm.s, probe[1])) + 3 * mm.s;
++      }
+       w = std::max(w, row);
+     }
+     if (rows > kOptionPages) w = std::max(w, widest_save_row(mm));
+@@ -1383,7 +1402,12 @@ void Menu::draw_settings(const Canvas& d) const {
+     if (!on) ink = kPanelEdgeDim;
+     else if (!is_sel && (s.flags & FlagInexact)) ink = kEdgeText;
+     draw_text(d, f.text_x, ry, m.list_s, ink, fit(s.label, m.list_s, f.avail - value_w).c_str());
+-    const std::string v = on ? display_value(s, host_->get(s.key)) : "--";
++    // Resolved before anything is joined onto it. The table knows "关", not
++    // "< 关 >", so a value translated after the arrows went on would come back
++    // in Chinese the moment it was selected -- and a row that reads right
++    // until it is picked is worse than one that reads wrong all the way
++    // through, because it never looks like a bug to the person who wrote it.
++    const std::string v = on ? std::string(tr_text(display_value(s, host_->get(s.key)).c_str())) : "--";
+     // A text field is opened, not stepped, so it gets no arrows: they would
+     // promise that left and right do something there.
+     const bool steps = s.type != Setting::Type::Text;
+@@ -1411,16 +1435,25 @@ void Menu::draw_settings(const Canvas& d) const {
+   // switch does not apply to them.
+   std::string when_text;
+   if (when) {
+-    when_text = when;
++    // Both halves resolved before they are joined: the joined string is one
++    // the table has never heard of, and neither half can be translated once
++    // they are.
++    when_text = tr_text(when);
+     if (page() == Page::DsOptions)
+-      if (const char* src = host_->user_settings_note()) { when_text += " - "; when_text += src; }
++      if (const char* src = host_->user_settings_note()) { when_text += " - "; when_text += tr_text(src); }
+     when = when_text.c_str();
+   }
+   if (line) {
+     const int lines = note_lines;
+-    // Wrapped on spaces rather than cut with an ellipsis: a note that stops
+-    // mid-sentence tells the player less than the room allows.
+-    std::string rest = line;
++    // Resolved before it is wrapped, and wrapped on spaces rather than cut
++    // with an ellipsis: a note that stops mid-sentence tells the player less
++    // than the room allows. The order is what makes the two work together --
++    // the table answers for a whole string, so a note cut up and then
++    // translated a piece at a time is a note every one of whose fragments
++    // misses it, which is how a row came out in Chinese with English set. It
++    // is also the width the row is measured in: a note cut to a Chinese
++    // measure leaves the English one no room, or vice versa.
++    std::string rest = tr_text(line);
+     for (int i = 0; i < lines && !rest.empty(); ++i) {
+       std::string take = rest;
+       size_t cut = std::string::npos;
+@@ -1763,6 +1796,15 @@ void Menu::draw_text_edit(const Canvas& d) const {
+   draw_text(d, fx, below + 2 * m.list_row_h, m.list_s, kDim, fit(kHelp2, m.list_s, avail).c_str());
+ }
+ 
++// The slot row is the only row draw() formats rather than takes whole, and in
++// Chinese it is the longest line on the page: 存档槽 < 0 > 已拒绝 is 25 bytes
++// where SLOT < 0 > REJECTED is 19. snprintf cuts at a byte, and a cut that
++// lands inside a glyph leaves a byte the drawing cannot decode -- the row used
++// to end in half of 绝. The buffer is named so the longest form can be held
++// against it here rather than in a comment that no compiler reads.
++constexpr int kRowBuf = 40;
++static_assert(kRowBuf > sizeof("存档槽 < 0 > 已拒绝"), "the slot row's longest form has to fit whole");
++
+ void Menu::draw(const Canvas& d) const {
+   // Mirror the UI language from config every frame so the whole menu -- labels,
+   // notes, choice values, page titles -- switches in place. ui.language is the
+@@ -1781,8 +1823,16 @@ void Menu::draw(const Canvas& d) const {
+   if (controls_page()) { draw_controls(d); return; }
+   if (page() == Page::TextEdit) { draw_text_edit(d); return; }
+   const bool slots = page() == Page::Slot;
++  // The auto state's row, only when there is an auto state to put on it. Empty
++  // it cannot be loaded -- there is nothing behind it -- and it cannot be
++  // deleted either, so the row had nothing to say for itself but "AUTO EMPTY":
++  // a slot the player never made, reading as a fault.
++  const bool auto_row = slots && used_[kAutoSlot];
+   Metrics m = metrics(d);
+-  const int rows = slots ? kSlotRows : root_rows();   // the slot page stacks its ten in two columns
++  // Two columns of five, the auto state's row when it has one, and the help
++  // line under both. The panel is sized from the rows that are drawn, which
++  // the auto row no longer is by default.
++  const int rows = slots ? kSlotRows + (auto_row ? 2 : 1) : root_rows();
+   // How wide the rows actually need to be. It used to be a flat 75 glyphs, on
+   // the reasoning that every label was short -- and then "成就"
+   // arrived and ran off the right edge. Measured now, with the old width as a
+@@ -1814,17 +1864,17 @@ void Menu::draw(const Canvas& d) const {
+   // Not PAUSED during a network session: the game behind this page is still
+   // running, because a console that stops for the length of a menu visit has
+   // left the session.
+-  const char* title = slots ? (slot_delete_ ? "删除状态" : "STATE SLOT") : (net_session_ ? "MENU" : "PAUSED");
++  const char* title = slots ? (slot_delete_ ? "删除状态" : "存档状态") : (net_session_ ? "MENU" : "PAUSED");
+   draw_text(d, px0 + (panel_w - text_width(scale, title)) / 2, py0 + title_y, scale, slots && slot_delete_ ? kDanger : kInk, title);
+   if (slots) {
+     // The pip is the DS's Y, on the left of the diamond, as on the Controls page.
+     const char* help = slot_delete_ ? "\x03 完成" : "\x03 删除";
+-    draw_text(d, px0 + (panel_w - text_width(scale, help)) / 2, py0 + rows_y + (kSlotRows + 1) * row_h, scale, kDim, help);
++    draw_text(d, px0 + (panel_w - text_width(scale, help)) / 2, py0 + rows_y + (auto_row ? kSlotRows + 1 : kSlotRows) * row_h, scale, kDim, help);
+   }
+   fill_rect(d, px0 + m.pad, py0 + rule_y, panel_w - 2 * m.pad, std::max(1, m.s / 2), kEdge);
+ 
+-  char buf[24];
+-  for (int i = 0; i < (slots ? kAutoSlot + 1 : root_rows()); ++i) {
++  char buf[kRowBuf];
++  for (int i = 0; i < (slots ? kAutoSlot + (auto_row ? 1 : 0) : root_rows()); ++i) {
+     // Slots fill a column at a time: 0-4 on the left, 5-9 on the right, and
+     // the auto state in a row of its own under both.
+     const int col = slots && i != kAutoSlot ? i / kSlotRows : 0;
+@@ -1840,8 +1890,8 @@ void Menu::draw(const Canvas& d) const {
+     const char* tag = tr_text(doomed ? "确认？" : used_[i] ? "USED" : "EMPTY");
+     if (slots && i == kAutoSlot) std::snprintf(buf, sizeof buf, tr_text("自动 %s"), tag);
+     else if (slots) std::snprintf(buf, sizeof buf, "%d %s", i, tag);
+-    else if (item == kSlotRow) std::snprintf(buf, sizeof buf, "SLOT < %d >%s%s", slot_,
+-                                             slot_notice_.empty() ? "" : " ", slot_notice_.c_str());
++    else if (item == kSlotRow) std::snprintf(buf, sizeof buf, tr_text("存档槽 < %d >%s%s"), slot_,
++                                             slot_notice_.empty() ? "" : " ", tr_text(slot_notice_.c_str()));
+     else label = kRoot[item].label;
+     // Loading an empty slot, and every empty slot in the list, reads dimmer:
+     // the menu says what is there before the player commits to it.
+diff --git a/src/frontend/sdl/settings.cpp b/src/frontend/sdl/settings.cpp
+index 93fce48..d12fb60 100644
+--- a/src/frontend/sdl/settings.cpp
++++ b/src/frontend/sdl/settings.cpp
+@@ -20,10 +20,15 @@ const Choice kCpuOc[] = {{"false", "关"}, {"underclock", "降频"}, {"overclock
+ // The rates a panel comes in, plus the console's own and no limiter at all.
+ // "auto" is the default and the only one that plays a game at the speed it was
+ // written for; 60 is 0.29 % fast, which is what a player means by "60 fps"
+-// and what lines up with a 60 Hz panel.
+-const Choice kLimiter[] = {{"auto", "CONSOLE (59.8)"}, {"30", "30"}, {"60", "60"}, {"120", "120"},
+-                           {"144", "144"}, {"240", "240"}, {"off", "UNLIMITED"}};
+-const Choice kIntScale[] = {{"off", "关"}, {"under", "不足"}, {"over", "超出"}};
++// and what lines up with a 60 Hz panel. Both ends are named in the row's own
++// language rather than left in English: the rest of the row is in the language
++// that is set, and a value in another one is the odd thing out on it.
++const Choice kLimiter[] = {{"auto", "实机 (59.8)"}, {"30", "30"}, {"60", "60"}, {"120", "120"},
++                           {"144", "144"}, {"240", "240"}, {"off", "无限制"}};
++// Named for what the player sees, not for how the scale gets there: "under"
++// leaves black bars around the picture and "over" cuts off its edges, and
++// those are the two things a row has to tell them apart.
++const Choice kIntScale[] = {{"off", "关"}, {"under", "留黑边"}, {"over", "裁切"}};
+ // 3D edges. "true"/"false" are the old boolean and read as accurate/off, and "smooth" is the older sub-pixel
+ // mode, still read from a file but no longer offered here -- enhanced supersedes it (aa_mode in main.cpp).
+ const Choice kAa[]       = {{"off", "关"}, {"accurate", "准确"}, {"enhanced", "增强"}};
+@@ -31,17 +36,19 @@ const Choice kSeam[]     = {{"dark", "暗色"}, {"blend", "混合"}, {"blend_lin
+ // The file's own words on the left. "mean" is the ordinary cell and reads as
+ // DEFAULT; the rest are named for what they do rather than how they do it.
+ const Choice kChunky[]   = {{"false", "关"}, {"mean", "默认"}, {"extreme", "自适应"},
+-                            {"mode", "众数"}, {"tl", "FIRST"}, {"min", "最暗"}, {"max", "最亮"}};
++                            {"mode", "众数"}, {"tl", "首个"}, {"min", "最暗"}, {"max", "最亮"}};
+ const Choice kScreen[]   = {{"top", "上屏"}, {"bottom", "下屏"}};
+-// GBATEK's order, which is what the firmware stores.
+-const Choice kColour[]   = {{"0", "GREY"}, {"1", "BROWN"}, {"2", "RED"}, {"3", "PINK"},
+-                            {"4", "ORANGE"}, {"5", "YELLOW"}, {"6", "LIME"}, {"7", "GREEN"},
+-                            {"8", "DARK GREEN"}, {"9", "TURQUOISE"}, {"10", "BLUE"}, {"11", "DARK BLUE"},
+-                            {"12", "PURPLE"}, {"13", "紫罗兰"}, {"14", "洋红"}, {"15", "暗粉"}};
++// GBATEK's order, which is what the firmware stores. Named the way the rest of
++// the row is: these are the colours the firmware offers and a player picks one
++// by its name, so it is the name that has to be in the language that is set.
++const Choice kColour[]   = {{"0", "灰"}, {"1", "棕"}, {"2", "红"}, {"3", "粉"},
++                            {"4", "橙"}, {"5", "黄"}, {"6", "青柠"}, {"7", "绿"},
++                            {"8", "深绿"}, {"9", "青绿"}, {"10", "蓝"}, {"11", "深蓝"},
++                            {"12", "紫"}, {"13", "紫罗兰"}, {"14", "洋红"}, {"15", "暗粉"}};
+ // The firmware stores the month as a number; the menu names it, because
+ // "BIRTHDAY MONTH 11" takes a moment to read and "十一月" does not.
+-const Choice kMonth[]    = {{"1", "JANUARY"}, {"2", "FEBRUARY"}, {"3", "MARCH"}, {"4", "APRIL"},
+-                            {"5", "MAY"}, {"6", "六月"}, {"7", "七月"}, {"8", "八月"},
++const Choice kMonth[]    = {{"1", "一月"}, {"2", "二月"}, {"3", "三月"}, {"4", "四月"},
++                            {"5", "五月"}, {"6", "六月"}, {"7", "七月"}, {"8", "八月"},
+                             {"9", "九月"}, {"10", "十月"}, {"11", "十一月"}, {"12", "十二月"}};
+ // Local wireless, as one row. AUTO is --netplay (join a session heard on the
+ // LAN, else host one); HOST and GUEST are the same scan with the decision
+@@ -119,7 +126,7 @@ const Setting kEmuSettings[] = {
+   // here now that the limiter has an UNLIMITED of its own -- a 60 Hz game
+   // with a fast forward that goes as fast as the machine will.
+   number("emu.ff_speed", "快进速度", 2, 16, 1, "0", FlagLive, Dep::NetSession,
+-         "按住快进时至少达到此倍实时速度", "0", "UNLIMITED", "X"),
++         "按住快进时至少达到此倍实时速度", "0", "无限制", "X"),
+   number("emu.ff_skip", "快进跳帧", 0, 9, 1, "3", FlagLive, Dep::NetSession,
+          "快进时每 N+1 帧只显示一帧"),
+   // The one audio row, and it lives here rather than on an audio page of its
+@@ -188,7 +195,7 @@ const Setting kLayoutSettings[] = {
+   percent("video.pip_alpha", "画中画不透明度", 0, 100, 10, "1", FlagDeferred, Dep::Pip,
+           "静止时小屏幕的实心程度"),
+   number("video.pip_touch_hold", "画中画触摸保持", 10, 300, 10, "60", FlagLive, Dep::PipTouchHold,
+-         "被触摸后小屏幕保持实心的帧数", "0", "NEVER FADE"),
++         "被触摸后小屏幕保持实心的帧数", "0", "永不淡出"),
+   percent("video.dominant_ratio", "主次比例", 10, 90, 5, "auto", FlagDeferred, Dep::Dominant,
+           "副屏的尺寸占比，自动按整像素适配", "auto", "自动"),
+   percent("video.dominant_threshold", "主次阈值", 10, 99, 5, "0.25", FlagDeferred, Dep::DominantThreshold,
+diff --git a/src/frontend/sdl/tr_data.inc b/src/frontend/sdl/tr_data.inc
+index 59444e0..ca24310 100644
+--- a/src/frontend/sdl/tr_data.inc
++++ b/src/frontend/sdl/tr_data.inc
+@@ -18,11 +18,15 @@ static const TrPair kTr[] = {
+   {"\x03 删除", "\x03 DELETE"},
+   {"\x03 完成", "\x03 DONE"},
+   {"七月", "JULY"},
++  {"一月", "JANUARY"},
++  {"二月", "FEBRUARY"},
++  {"三月", "MARCH"},
++  {"四月", "APRIL"},
++  {"五月", "MAY"},
+   {"上下 选字符   L/R 换字表", "UP/DOWN LETTER   L/R TABLE"},
+   {"上屏", "TOP"},
+   {"下屏", "BOTTOM"},
+   {"不与月份校验，与实机行为一致", "NOT CHECKED AGAINST THE MONTH, AS THE CONSOLE DOES NOT EITHER"},
+-  {"不足", "UNDER"},
+   {"两个屏幕在窗口中的排列方式", "HOW THE TWO SCREENS SHARE THE WINDOW"},
+   {"两块屏幕上下叠放或左右并排时的面板像素间距", "PANEL PIXELS BETWEEN THE TWO SCREENS WHEN THEY ARE STACKED OR SIDE BY SIDE"},
+   {"中文", "CHINESE"},
+@@ -37,6 +41,7 @@ static const TrPair kTr[] = {
+   {"九月", "SEPTEMBER"},
+   {"互联网", "INTERNET"},
+   {"众数", "COMMON"},
++  {"首个", "FIRST"},
+   {"保存到 < %s >", "SAVE TO < %s >"},
+   {"保存到 < 本游戏 >", "SAVE TO < THIS GAME >"},
+   {"保存存档", "SAVE STATE"},
+@@ -72,6 +77,11 @@ static const TrPair kTr[] = {
+   {"大写字母", "CAPITALS"},
+   {"存档槽 < 0 >", "SLOT < 0 >"},
+   {"存档槽 < 0 > 已拒绝", "SLOT < 0 > REJECTED"},
++  {"存档槽 < %d >%s%s", "SLOT < %d >%s%s"},
++  // The row's own tag, which arrives from the emulator as the config value
++  // REJECTED and is translated on its way into the format above: without this
++  // the Chinese row read 存档槽 < 0 > REJECTED, half in each language.
++  {"已拒绝", "REJECTED"},
+   {"客机", "GUEST"},
+   {"小写字母", "LOWERCASE"},
+   {"小屏幕所处的位置", "WHERE THE SMALL SCREEN SITS"},
+@@ -85,6 +95,8 @@ static const TrPair kTr[] = {
+   {"布局快捷键在勾选的布局间循环，始终保留一个", "THE LAYOUT HOTKEYS STEP THROUGH THE TICKED LAYOUTS. ONE ALWAYS STAYS"},
+   {"帧数显示", "FPS COUNTER"},
+   {"帧率上限", "FRAME LIMITER"},
++  {"实机 (59.8)", "CONSOLE (59.8)"},
++  {"无限制", "UNLIMITED"},
+   {"平滑缩放，会覆盖网格、接缝与像素块", "SMOOTH SCALING. OVERRIDES THE GRID, SEAMS AND CHUNKY"},
+   {"开", "ON"},
+   {"循环 主次横向", "CYCLE DOMINANT H"},
+@@ -113,6 +125,8 @@ static const TrPair kTr[] = {
+   {"提前缓冲的声音，越低延迟越小，也更容易听到卡顿", "SOUND HELD AHEAD. LOWER IS LESS DELAY, LESS SLACK BEFORE A LATE FRAME IS HEARD"},
+   {"数字与符号", "NUM+SYM"},
+   {"整数缩放", "INTEGER SCALE"},
++  {"留黑边", "UNDER"},
++  {"裁切", "OVER"},
+   {"日语", "JAPANESE"},
+   {"时序超频", "TIMING OC"},
+   {"昵称", "NICKNAME"},
+@@ -144,7 +158,6 @@ static const TrPair kTr[] = {
+   {"游戏查询服务器的方式。任天堂的已关停，改用 Wiimmfi", "WHERE THE GAME LOOKS UP ITS SERVERS. NINTENDO'S ARE GONE; WIIMMFI REPLACES THEM"},
+   {"游戏被限制到的帧率，实机即原目标帧率", "THE RATE THE GAME IS HELD TO. CONSOLE IS THE ONE THE GAME WAS WRITTEN FOR"},
+   {"游戏速度", "GAME SPEED"},
+-  {"状态槽", "STATE SLOT"},
+   {"生日日期", "BIRTHDAY DAY"},
+   {"生日月份", "BIRTHDAY MONTH"},
+   {"画中画", "PIP"},
+@@ -160,6 +173,19 @@ static const TrPair kTr[] = {
+   {"确认？", "SURE?"},
+   {"空", "EMPTY"},
+   {"紫罗兰", "VIOLET"},
++  {"灰", "GREY"},
++  {"棕", "BROWN"},
++  {"红", "RED"},
++  {"粉", "PINK"},
++  {"橙", "ORANGE"},
++  {"黄", "YELLOW"},
++  {"青柠", "LIME"},
++  {"绿", "GREEN"},
++  {"深绿", "DARK GREEN"},
++  {"青绿", "TURQUOISE"},
++  {"蓝", "BLUE"},
++  {"深蓝", "DARK BLUE"},
++  {"紫", "PURPLE"},
+   {"纵向", "VERTICAL"},
+   {"线性混合", "BLEND LINEAR"},
+   {"线性过滤", "BILINEAR"},
+@@ -179,8 +205,18 @@ static const TrPair kTr[] = {
+   {"解锁提示", "UNLOCK NOTICES"},
+   {"解锁时截图", "SCREENSHOT ON UNLOCK"},
+   {"请按下按键...", "PRESS ANY..."},
++  {"修饰键", "MODIFIER"},
++  {"触摸笔", "STYLUS TAP"},
++  {"触摸笔 (2)", "STYLUS TAP (2)"},
++  {"触摸笔摇杆", "STYLUS STICK"},
++  {"触摸笔方向键", "STYLUS DPAD"},
++  {"摇杆方向键", "STICK DPAD"},
++  {"摇杆按键", "STICK ABXY"},
++  {"左摇杆 右", "L STICK RIGHT"},
++  {"左摇杆 下", "L STICK DOWN"},
++  {"右摇杆 右", "R STICK RIGHT"},
++  {"右摇杆 下", "R STICK DOWN"},
+   {"读取存档", "LOAD STATE"},
+-  {"超出", "OVER"},
+   {"超频", "OVERCLOCK"},
+   {"跳帧", "FRAMESKIP"},
+   {"跳帧模式", "FRAMESKIP MODE"},
+@@ -188,6 +224,22 @@ static const TrPair kTr[] = {
+   {"退出时存档", "AUTOSAVE ON QUIT"},
+   {"退出模拟器时自动存档以便续玩", "SAVE A STATE WHEN THE EMULATOR EXITS, TO RESUME FROM"},
+   {"退出登录", "SIGN OUT"},
++  {"暂停游戏", "PAUSE"},
++  {"快进", "FAST FORWARD"},
++  {"快进开关", "FAST FORWARD TOGGLE"},
++  {"下个槽位", "NEXT SLOT"},
++  {"上个槽位", "PREV SLOT"},
++  {"音量+", "VOLUME UP"},
++  {"音量-", "VOLUME DOWN"},
++  {"静音", "MUTE"},
++  {"下个布局", "NEXT LAYOUT"},
++  {"上个布局", "PREV LAYOUT"},
++  {"交换屏幕", "SWAP SCREENS"},
++  {"小窗位置", "PIP CORNER NEXT"},
++  {"截图", "SCREENSHOT"},
++  {"合盖", "LID"},
++  {"麦克风", "MICROPHONE"},
++  {"帧数", "FPS"},
+   {"选项", "OPTIONS"},
+   {"部分游戏会在这个月祝你生日快乐", "GAMES THAT WISH YOU A HAPPY BIRTHDAY USE THIS"},
+   {"部分游戏会用它做自己的配色", "SOME GAMES COLOUR THEMSELVES WITH IT"},
+@@ -201,8 +253,35 @@ static const TrPair kTr[] = {
+   {"降频：为较难运行或最低端设备准备，游戏异常时请关闭", "UNDERCLOCK: FOR THE HARDER TO RUN GAMES AND/OR THE LOWEST END DEVICES. OFF IF A GAME MISBEHAVES"},
+   {"隐藏 NAND 的 DSiWare", "HIDE NAND DSIWARE"},
+   {"需要重启", "RESTART REQUIRED"},
++  {"联网会话中不可用", "NOT DURING A NETWORK SESSION"},
++  {"仅在开启跳帧后", "ONLY WITH FRAMESKIP ON"},
++  {"仅在开启像素块后", "ONLY WITH CHUNKY ON"},
++  {"线性过滤已开启", "BILINEAR IS ON"},
++  {"此屏幕由硬件缩放", "THIS SCREEN SCALES IN HARDWARE"},
++  {"此屏幕始终全屏", "THIS SCREEN IS ALWAYS FULL"},
++  {"此构建未含网络功能", "THIS BUILD HAS NO NETWORKING"},
++  {"双窗口下不可用", "NOT WITH TWO WINDOWS"},
++  {"仅主次布局", "DOMINANT LAYOUTS ONLY"},
++  {"仅比例为自动时", "ONLY WHEN THE RATIO IS AUTO"},
++  {"仅画中画布局", "PIP LAYOUT ONLY"},
++  {"仅在小窗口会淡出时", "ONLY WHEN THE PIP FADES"},
++  {"仅网络功能为互联网时", "ONLY WITH NETWORK FEATURES ON INTERNET"},
++  {"需要 PATHS.DSI_SHORTCUTS 或 PATHS.GAMES", "NEEDS PATHS.DSI_SHORTCUTS OR PATHS.GAMES"},
+   {"静止时小屏幕的实心程度", "HOW SOLID THE SMALL SCREEN IS AT REST"},
+   {"音频缓冲", "AUDIO BUFFER"},
++  {"永不淡出", "NEVER FADE"},
+   {"默认", "DEFAULT"},
++  {"保存在固件中", "IN THE FIRMWARE"},
++  {"存档状态", "STATE SLOT"},
++  {"无", "NONE"},
++  {"左摇杆", "LEFT STICK"},
++  {"右摇杆", "RIGHT STICK"},
++  {"左摇杆 X", "L STICK X"},
++  {"左摇杆 Y", "L STICK Y"},
++  {"右摇杆 X", "R STICK X"},
++  {"右摇杆 Y", "R STICK Y"},
++  {"反向", "INV"},
++  {"L2 轴", "L2 AXIS"},
++  {"R2 轴", "R2 AXIS"},
+ };
+ static const int kTrN = static_cast<int>(sizeof(kTr) / sizeof(kTr[0]));
+diff --git a/tests/menu_test.cpp b/tests/menu_test.cpp
+index bb0ad72..afbae88 100644
+--- a/tests/menu_test.cpp
++++ b/tests/menu_test.cpp
+@@ -1603,7 +1603,11 @@ struct LeakHost final : ds::sdl::CheevosHost, ds::sdl::SettingsHost {
+     const auto it = kv.find(key);
+     return it == kv.end() ? "" : it->second;
+   }
+-  void set(const char*, const std::string&) override {}
++  // Kept, unlike the rest of this host: stepping a row has to move it, or the
++  // walk below only ever sees the value a row starts on and never the ones
++  // beside it -- and a choice that is only wrong in Chinese is wrong on a row
++  // the walk never reached.
++  void set(const char* k, const std::string& v) override { kv[k] = v; }
+   bool enabled(const ds::sdl::Setting&) const override { return true; }
+   const char* disabled_reason(const ds::sdl::Setting&) const override { return ""; }
+   bool value_allowed(const ds::sdl::Setting&, const char*) const override { return true; }
+@@ -1657,18 +1661,49 @@ void test_no_page_draws_chinese_with_english_set() {
+   m.set_cheats(&codes, &groups);
+   m.set_games(&host.games);
+   m.set_open(true);
+-
+-  m.draw(d);                                                               // the root
+-  m.input(press(B::BTN_DOWN)); m.draw(d);                                  // the slot page
+-  m.input(press(B::BTN_A)); m.draw(d);                                     // armed: the row reads SURE?
+-  m.input(press(B::BTN_B)); m.draw(d);
+-  m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_DOWN));                 // down to the cheats row
++  // A state in the auto slot, so the slot page draws the row that hangs off
++  // it: with none, that row is not drawn at all and nothing on the walk reads
++  // it -- which is the whole reason a row can be wrong and the suite green.
++  m.set_slot_used(Menu::kAutoSlot, true);
++  m.set_slot_used(0, true);
++
++  // Walked by row, not by pressing until something happens: the root's rows
++  // are 保存存档, 读取存档, the slot row, 金手指, 选项, 成就 and the rest, and
++  // a walk that does not know which row it is on has no way of knowing which
++  // page it opened.
++  m.draw(d);                                                               // the root, on 保存存档
++  m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_DOWN));                 // to the slot row
++  m.input(press(B::BTN_A)); m.draw(d);                                     // the slot page
++  m.input(press(B::BTN_Y)); m.draw(d);                                     // delete mode, where its auto row is
++  for (int i = 0; i < 7; ++i) { m.draw(d); m.input(press(B::BTN_DOWN)); }   // every cell of both columns
++  m.input(press(B::BTN_A)); m.draw(d);                                     // a used cell, armed: it reads 确认？
++  m.input(press(B::BTN_B)); m.draw(d);                                     // disarmed
++  m.input(press(B::BTN_B)); m.draw(d);                                     // out of the slot page
++  m.input(press(B::BTN_DOWN));                                             // to 金手指
+   m.input(press(B::BTN_A)); m.draw(d);                                     // the cheats page
++  for (int i = 0; i < 4; ++i) { m.draw(d); m.input(press(B::BTN_DOWN)); }
+   m.input(press(B::BTN_B)); m.draw(d);
++  m.input(press(B::BTN_DOWN));                                             // to 选项
+   m.input(press(B::BTN_A)); m.draw(d);                                     // Options, save-to row and all
+-  m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_A)); m.draw(d);         // one of its pages
+-  m.input(press(B::BTN_B)); m.draw(d);
+-  for (int i = 0; i < 5; ++i) m.input(press(B::BTN_DOWN));                 // down to the achievements row
++  // Every page Options opens, and on each one every row: the note under the
++  // list is the selected row's, so a walk that stopped at the top of a page
++  // would read one note out of fifteen. The sixth row of Options is the
++  // language switch, which is why this stops at five.
++  for (int page = 0; page < 5; ++page) {
++    m.input(press(B::BTN_A)); m.draw(d);                                   // in
++    for (int row = 0; row < 20; ++row) {
++      m.draw(d);
++      // And every value a row can hold, not just the one it starts on: a
++      // choice is a string the row draws, and the one that is missing from the
++      // table is only ever seen once the row has been stepped onto it.
++      for (int step = 0; step < 8; ++step) { m.input(press(B::BTN_RIGHT)); m.draw(d); }
++      m.input(press(B::BTN_DOWN));
++    }
++    m.input(press(B::BTN_B)); m.draw(d);                                   // out
++    m.input(press(B::BTN_DOWN));                                           // the next row of Options
++  }
++  m.input(press(B::BTN_B)); m.draw(d);                                     // out of Options
++  m.input(press(B::BTN_DOWN));                                             // to 成就
+   m.input(press(B::BTN_A)); m.draw(d);                                     // the achievements page
+   m.input(press(B::BTN_B)); m.draw(d);
+   m.open_games(); m.draw(d);                                               // the game list
+@@ -1679,6 +1714,103 @@ void test_no_page_draws_chinese_with_english_set() {
+   ds::sdl::g_i18n_leaks = 0;
+ }
+ 
++// The other direction, and the one the walk above cannot see: a value left in
++// English is a value the player reads in English with Chinese set, and on the
++// screen it is indistinguishable from one that is meant to be -- WIIMMFI and
++// DNS are names, GREY and UNLIMITED are not. What makes a row translatable is
++// that the table has an English for it, so this asks the table rather than
++// looking at the row.
++//
++// It also asks the one thing that makes the two directions work at all: a row
++// is written in Chinese and tr_text resolves by strcmp against what the source
++// wrote, so a row written in English is a row that can never be translated --
++// in either direction.
++void test_every_settings_string_has_an_english_entry() {
++  const auto has_han = [](const char* s) {
++    if (!s) return false;
++    for (const unsigned char* p = reinterpret_cast<const unsigned char*>(s); *p; ++p)
++      if (*p >= 0xE3) return true;         // CJK, its punctuation, fullwidth forms
++    return false;
++  };
++  // A word that is the word in any language: a server's name, a checkbox.
++  const auto neutral = [](const char* s) {
++    if (!s || !*s) return true;
++    for (const char* p = s; *p; ++p)
++      if ((*p >= 'A' && *p <= 'Z') || (*p >= 'a' && *p <= 'z')) return false;
++    return true;
++  };
++  // A name that is the name in any language -- a server's, a protocol's -- and
++  // the two states of a checkbox, which are drawn rather than read.
++  const auto named = [](const char* s) {
++    return std::strcmp(s, "WIIMMFI") == 0 || std::strcmp(s, "DNS") == 0
++        || std::strcmp(s, "[ ]") == 0 || std::strcmp(s, "[X]") == 0;
++  };
++  const auto resolvable = [](const char* s) {
++    return std::strcmp(ds::sdl::tr_text(s), s) != 0;   // the table has the other language
++  };
++  const ds::sdl::Setting* tables[] = {ds::sdl::kEmuSettings, ds::sdl::kVideoSettings,
++                                      ds::sdl::kLayoutSettings, ds::sdl::kUserSettings};
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
++  for (const ds::sdl::Setting* t : tables) {
++    for (int i = 0; t[i].key; ++i) {
++      const ds::sdl::Setting& s = t[i];
++      CHECK(has_han(s.label) || neutral(s.label) || named(s.label));
++      if (has_han(s.label)) CHECK(resolvable(s.label));
++      if (s.note) { CHECK(has_han(s.note)); CHECK(resolvable(s.note)); }
++      if (s.sentinel_label) { CHECK(has_han(s.sentinel_label)); CHECK(resolvable(s.sentinel_label)); }
++      for (int c = 0; c < s.nchoices; ++c) {
++        CHECK(has_han(s.choices[c].label) || neutral(s.choices[c].label) || named(s.choices[c].label));
++        if (has_han(s.choices[c].label)) CHECK(resolvable(s.choices[c].label));
++      }
++    }
++  }
++}
++
++// The one tag on the slot row that does not come from a table of choices: the
++// emulator writes the config value REJECTED into the notice, and the row
++// translates it on the way into its own format. Without the pair, the row read
++// 存档槽 < 0 > REJECTED -- a Chinese line with an English word in it -- and no
++// walk could see it, because the notice is set only after a state is refused.
++void test_the_refused_state_tag_has_both_languages() {
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
++  CHECK(std::strcmp(ds::sdl::tr_text("已拒绝"), "REJECTED") == 0);
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::Zh;
++  CHECK(std::strcmp(ds::sdl::tr_text("REJECTED"), "已拒绝") == 0);
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
++}
++
++// The auto state's row, only when there is an auto state to put on it. Empty it
++// cannot be loaded -- there is nothing behind it -- and it cannot be deleted,
++// so the row had nothing to say for itself but AUTO EMPTY, in a slot the
++// player never made.
++void test_auto_row_shown_only_when_the_auto_state_exists() {
++  // Without one: the column is five cells and walking off its foot wraps.
++  {
++    Menu m;
++    m.set_open(true);
++    m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_DOWN));   // the slot row
++    m.input(press(B::BTN_A));                                   // the slot page, on 0
++    m.input(press(B::BTN_Y));                                   // delete mode, where the cell was
++    for (int i = 0; i < 4; ++i) m.input(press(B::BTN_DOWN));     // to the foot of the column
++    m.input(press(B::BTN_DOWN));                                 // and one past it
++    CHECK(m.doomed_slot() == 0);                                 // wrapped: there is nothing past it
++  }
++  // With one: the same walk lands on it, and it can be deleted there.
++  {
++    Menu m;
++    m.set_open(true);
++    m.set_slot_used(Menu::kAutoSlot, true);
++    m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_DOWN));
++    m.input(press(B::BTN_A));
++    m.input(press(B::BTN_Y));
++    for (int i = 0; i < 4; ++i) m.input(press(B::BTN_DOWN));
++    m.input(press(B::BTN_DOWN));
++    CHECK(m.doomed_slot() == Menu::kAutoSlot);
++    m.input(press(B::BTN_A));
++    CHECK(m.input(press(B::BTN_A)) == Menu::Result::Delete);
++  }
++}
++
+ // The same pages with the language switched, which is the state the CJK face
+ // exists for: every row on a page is now text the 5x7 grid has no glyph for,
+ // and the drawing goes to the embedded one for all of it.
+@@ -1769,6 +1901,9 @@ int main() {
+   test_chinese_draws_from_the_embedded_face();
+   test_chinese_page_draws();
+   test_no_page_draws_chinese_with_english_set();
++  test_every_settings_string_has_an_english_entry();
++  test_the_refused_state_tag_has_both_languages();
++  test_auto_row_shown_only_when_the_auto_state_exists();
+   std::printf("menu: ok\n");
+   return 0;
+ }

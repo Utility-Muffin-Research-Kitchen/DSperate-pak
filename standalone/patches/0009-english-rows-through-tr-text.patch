@@ -1,0 +1,285 @@
+diff --git a/src/frontend/sdl/i18n.h b/src/frontend/sdl/i18n.h
+index 36158d6..b7b7c4f 100644
+--- a/src/frontend/sdl/i18n.h
++++ b/src/frontend/sdl/i18n.h
+@@ -24,6 +24,15 @@ extern UiLang g_ui_lang;
+ // draws, say -- does not have to reach into menu.cpp.
+ const char* tr_text(const char* s);
+ 
++// The leak check draw_text() and text_width() run on every string they are
++// handed: with English set, a string carrying a Han character or a fullwidth
++// form is one the table could not translate, so the player is about to read a
++// row in the wrong language. Off unless the tests turn it on -- a leak and a
++// correctly drawn English row look identical on screen, so nothing in the
++// product can tell them apart, and the tests are the only place that can.
++extern bool g_strict_i18n;
++extern int g_i18n_leaks;
++
+ // Convenience for the rare call site that already has both forms in hand:
+ // returns `zh` in Chinese mode, `en` otherwise.
+ inline const char* ds_tr(const char* en, const char* zh) {
+diff --git a/src/frontend/sdl/menu.cpp b/src/frontend/sdl/menu.cpp
+index 6293b30..a1109d4 100644
+--- a/src/frontend/sdl/menu.cpp
++++ b/src/frontend/sdl/menu.cpp
+@@ -40,6 +40,39 @@ const char* tr_text(const char* s) {
+   return s;
+ }
+ 
++// Off unless the tests switch it on. A string the drawing is about to paint
++// that the table cannot translate is a row the player reads in the wrong
++// language, and with English set there is nothing on screen to tell that from
++// a row that was drawn in English: a leak and a correct row look the same. The
++// tests turn this on and walk every page, and what it counts is the only way
++// the drawing can be held to the one rule the table cannot enforce on its own.
++bool g_strict_i18n = false;
++int g_i18n_leaks = 0;
++
++// A Han character or fullwidth form, from the U+2E80 threshold the layout uses
++// to decide a code point is drawn as a square.
++bool has_cjk(const char* s) {
++  for (const char* p = s; *p;) {
++    const unsigned char b = static_cast<unsigned char>(*p++);
++    const int len = b >= 0xF0 ? 4 : b >= 0xE0 ? 3 : b >= 0xC0 ? 2 : 0;
++    if (len == 0) continue;
++    u32 cp = b & (0x7F >> len);
++    for (int i = 1; i < len && *p; ++i, ++p) {
++      const unsigned char c = static_cast<unsigned char>(*p);
++      if ((c & 0xC0) != 0x80) break;
++      cp = (cp << 6) | (c & 0x3F);
++    }
++    if (cp >= 0x2E80) return true;
++  }
++  return false;
++}
++
++// Counted, not raised: the menu is not the place for an exception, and one bad
++// row must not take the emulator down with it.
++void note_i18n(const char* s) {
++  if (g_strict_i18n && g_ui_lang == UiLang::En && has_cjk(s)) ++g_i18n_leaks;
++}
++
+ namespace {
+ 
+ // 5x7 glyphs, one byte per row, bits 4..0 left to right; ' ' (0x20) to ']'
+@@ -307,6 +340,7 @@ int step_for(u32 cp, int scale) {
+ 
+ int text_width(int scale, const char* s) {
+   s = tr_text(s);
++  note_i18n(s);
+   int w = 0;
+   for (const char* p = s; *p;) w += step_for(next_cp(p), scale);   // glyphs, not bytes
+   return w > 0 ? w - scale : 0;   // no gap after the last glyph
+@@ -314,6 +348,7 @@ int text_width(int scale, const char* s) {
+ 
+ int draw_text(const Canvas& d, int x, int y, int scale, u32 colour, const char* s, bool keep_case) {
+   s = tr_text(s);
++  note_i18n(s);
+   for (const char* p = s; *p;) {
+     const u32 cp = next_cp(p);
+     if (cjk_square(cp)) {
+@@ -778,7 +813,11 @@ void Menu::draw_cheats(const Canvas& d) const {
+   size_t on = 0;
+   if (codes_) for (const cheat::Code& c : *codes_) if (c.enabled) ++on;
+   char title[32];
+-  std::snprintf(title, sizeof title, "金手指  已启用 %zu 条", on);
++  // The translation goes in before the count does: tr_text matches the table
++  // exactly, and a filled-in "3" is not the string the table holds, so a
++  // heading formatted first and translated after comes out in the source
++  // language -- Chinese -- with English set.
++  std::snprintf(title, sizeof title, tr_text("金手指  已启用 %zu 条"), on);
+   const ListFrame f = list_frame(d, title);
+   const Metrics& m = f.m;
+   visible_ = f.visible;
+@@ -847,7 +886,7 @@ void Menu::draw_cheats(const Canvas& d) const {
+ void Menu::draw_games(const Canvas& d) const {
+   const int n = games_ ? static_cast<int>(games_->size()) : 0;
+   char title[32];
+-  std::snprintf(title, sizeof title, "游戏  %d", n);
++  std::snprintf(title, sizeof title, tr_text("游戏  %d"), n);
+   const ListFrame f = list_frame(d, title);
+   const Metrics& m = f.m;
+   visible_ = f.visible;
+@@ -900,7 +939,7 @@ void Menu::draw_cheevos(const Canvas& d) const {
+   if (cheevos_ && cheevos_->row_count() > 0) {
+     int unlocked = 0;
+     for (int i = 0; i < cheevos_->row_count(); ++i) if (cheevos_->row(i).unlocked) ++unlocked;
+-    std::snprintf(title, sizeof title, "成就  %d/%d", unlocked, cheevos_->row_count());
++    std::snprintf(title, sizeof title, tr_text("成就  %d/%d"), unlocked, cheevos_->row_count());
+   }
+   const ListFrame f = list_frame(d, title);
+   const Metrics& m = f.m;
+@@ -1239,12 +1278,24 @@ void Menu::draw_options(const Canvas& d) const {
+   const int rows = kOptionPages + (host_ && host_->has_game() ? 1 : 0);
+   const bool per_game = host_ && host_->save_per_game();
+   char save_row[40];
+-  std::snprintf(save_row, sizeof save_row, "保存到 < %s >", per_game ? "本游戏" : "全局");
++  // Both parts of the row are translated before the count goes in, the label
++  // as well as the format, because neither "保存到 < %s >" nor "本游戏" is the
++  // string the table holds once the value is filled in.
++  std::snprintf(save_row, sizeof save_row, tr_text("保存到 < %s >"),
++                tr_text(per_game ? "本游戏" : "全局"));
+   // Sized for the widest row the page can ever draw, not the one it is drawing
+-  // now: the save-to switch is longer on "本游戏" than on "全局", and
++  // now: the save-to switch is longer on one value than on the other, and
+   // measuring the current text made the whole panel change width as it was
+-  // toggled. Always measure the long one.
+-  static constexpr const char* kWidestSaveRow = "保存到 < 本游戏 >";
++  // toggled. Both values are measured in the language that is set, since what
++  // gets drawn is the translated row and a width taken from the Chinese would
++  // leave the English one no room.
++  const auto widest_save_row = [](const Metrics& mm) {
++    const char* values[2] = {tr_text("本游戏"), tr_text("全局")};
++    char probe[2][40];
++    for (int i = 0; i < 2; ++i)
++      std::snprintf(probe[i], sizeof probe[i], tr_text("保存到 < %s >"), values[i]);
++    return std::max(text_width(mm.s, probe[0]), text_width(mm.s, probe[1]));
++  };
+   const auto widest_row = [&](const Metrics& mm) {
+     int w = 0;
+     for (int i = 0; i < kOptionPages; ++i) {
+@@ -1256,7 +1307,7 @@ void Menu::draw_options(const Canvas& d) const {
+         row += std::max(text_width(mm.s, "< English >"), text_width(mm.s, "< 中文 >")) + 3 * mm.s;
+       w = std::max(w, row);
+     }
+-    if (rows > kOptionPages) w = std::max(w, text_width(mm.s, kWidestSaveRow));
++    if (rows > kOptionPages) w = std::max(w, widest_save_row(mm));
+     return w;
+   };
+   // Step the scale down rather than clip, as the root page does. The margin is
+@@ -1784,8 +1835,10 @@ void Menu::draw(const Canvas& d) const {
+     const char* label = buf;
+     const int item = slots ? i : root_item(i);
+     const bool doomed = slots && slot_armed_ && i == slot_row_;
+-    const char* tag = doomed ? "确认？" : used_[i] ? "USED" : "EMPTY";
+-    if (slots && i == kAutoSlot) std::snprintf(buf, sizeof buf, "自动 %s", tag);
++    // The tag is translated where it is taken, and the format joins it, so the
++    // row reaches the table before any value goes into it.
++    const char* tag = tr_text(doomed ? "确认？" : used_[i] ? "USED" : "EMPTY");
++    if (slots && i == kAutoSlot) std::snprintf(buf, sizeof buf, tr_text("自动 %s"), tag);
+     else if (slots) std::snprintf(buf, sizeof buf, "%d %s", i, tag);
+     else if (item == kSlotRow) std::snprintf(buf, sizeof buf, "SLOT < %d >%s%s", slot_,
+                                              slot_notice_.empty() ? "" : " ", slot_notice_.c_str());
+diff --git a/tests/menu_test.cpp b/tests/menu_test.cpp
+index 9c5b08c..bb0ad72 100644
+--- a/tests/menu_test.cpp
++++ b/tests/menu_test.cpp
+@@ -1575,6 +1575,110 @@ void test_canvas_sizes() {
+   }
+ }
+ 
++// Both hosts a menu can be given, on one object: the walk below needs a cheat
++// list to count in a heading, a game loaded so the options page has a save-to
++// row, and an achievement set to total, because a row drawn in the wrong
++// language still draws -- it only reads wrong.
++struct LeakHost final : ds::sdl::CheevosHost, ds::sdl::SettingsHost {
++  using Row = ds::sdl::CheevosHost::Row;
++  using Option = ds::sdl::CheevosHost::Option;
++  using Binding = ds::sdl::SettingsHost::Binding;
++
++  std::map<std::string, std::string> kv;
++  std::vector<Row> rows;
++  std::vector<Menu::GameEntry> games;
++
++  std::string status() const override { return "SIGNED IN"; }
++  std::string progress() const override { return "1/2 EARNED  5/15 POINTS"; }
++  bool signed_in() const override { return true; }
++  bool has_set() const override { return true; }
++  int row_count() const override { return static_cast<int>(rows.size()); }
++  Row row(int i) const override { return rows.at(static_cast<size_t>(i)); }
++  void sign_in(const std::string&, const std::string&) override {}
++  void sign_out() override {}
++  bool option(Option) const override { return false; }
++  void set_option(Option, bool) override {}
++
++  std::string get(const char* key) const override {
++    const auto it = kv.find(key);
++    return it == kv.end() ? "" : it->second;
++  }
++  void set(const char*, const std::string&) override {}
++  bool enabled(const ds::sdl::Setting&) const override { return true; }
++  const char* disabled_reason(const ds::sdl::Setting&) const override { return ""; }
++  bool value_allowed(const ds::sdl::Setting&, const char*) const override { return true; }
++  void commit() override {}
++  bool save_per_game() const override { return false; }
++  void set_save_per_game(bool) override {}
++  bool has_game() const override { return true; }
++
++  int binding_count(bool) const override { return 0; }
++  Binding binding(bool, int) const override { return {"", "", ""}; }
++  bool has_pad() const override { return false; }
++  void begin_capture(bool) override {}
++  void cancel_capture() override {}
++  bool capturing() const override { return false; }
++  std::string take_capture() override { return ""; }
++  void bind(const std::string&, const std::string&) override {}
++  void reset_bindings(bool) override {}
++  std::vector<std::string> collisions() const override { return {}; }
++  const char* user_settings_note() const override { return nullptr; }
++};
++
++// With English set, a row the table cannot translate is a row the player reads
++// in Chinese -- and on it looks exactly like a row that was drawn in English,
++// which is why the suite passed with five of them on screen and why no pixel
++// assertion could have caught them: there is nothing to assert on but the
++// count. Every page is walked rather than the five rows named, because a
++// sixth will not be found by reading the drawing path the way those were.
++void test_no_page_draws_chinese_with_english_set() {
++  std::vector<ds::cheat::Code> codes;
++  std::vector<ds::cheat::Group> groups;
++  { ds::cheat::Group g; g.name = "GROUP"; groups.push_back(g); }
++  ds::cheat::Code c;
++  c.name = "金手指";
++  c.group = 0;
++  c.words = {0x02000000, 1};
++  c.enabled = true;                                     // the heading counts it
++  codes.push_back(c);
++
++  LeakHost host;
++  host.rows.resize(3);                                  // and the achievements heading counts those
++  std::vector<u32> fb(ds::SCREEN_W * ds::SCREEN_H, 0);
++  const ds::sdl::Canvas d{fb.data(), ds::SCREEN_W, ds::SCREEN_W, ds::SCREEN_H};
++
++  ds::sdl::g_ui_lang = ds::sdl::UiLang::En;
++  ds::sdl::g_strict_i18n = true;
++  ds::sdl::g_i18n_leaks = 0;
++
++  Menu m;
++  m.set_settings_host(&host);
++  m.set_cheevos_host(&host);
++  m.set_cheats(&codes, &groups);
++  m.set_games(&host.games);
++  m.set_open(true);
++
++  m.draw(d);                                                               // the root
++  m.input(press(B::BTN_DOWN)); m.draw(d);                                  // the slot page
++  m.input(press(B::BTN_A)); m.draw(d);                                     // armed: the row reads SURE?
++  m.input(press(B::BTN_B)); m.draw(d);
++  m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_DOWN));                 // down to the cheats row
++  m.input(press(B::BTN_A)); m.draw(d);                                     // the cheats page
++  m.input(press(B::BTN_B)); m.draw(d);
++  m.input(press(B::BTN_A)); m.draw(d);                                     // Options, save-to row and all
++  m.input(press(B::BTN_DOWN)); m.input(press(B::BTN_A)); m.draw(d);         // one of its pages
++  m.input(press(B::BTN_B)); m.draw(d);
++  for (int i = 0; i < 5; ++i) m.input(press(B::BTN_DOWN));                 // down to the achievements row
++  m.input(press(B::BTN_A)); m.draw(d);                                     // the achievements page
++  m.input(press(B::BTN_B)); m.draw(d);
++  m.open_games(); m.draw(d);                                               // the game list
++
++  CHECK(ds::sdl::g_i18n_leaks == 0);
++
++  ds::sdl::g_strict_i18n = false;                       // leave the suite off it
++  ds::sdl::g_i18n_leaks = 0;
++}
++
+ // The same pages with the language switched, which is the state the CJK face
+ // exists for: every row on a page is now text the 5x7 grid has no glyph for,
+ // and the drawing goes to the embedded one for all of it.
+@@ -1664,6 +1768,7 @@ int main() {
+   test_canvas_sizes();
+   test_chinese_draws_from_the_embedded_face();
+   test_chinese_page_draws();
++  test_no_page_draws_chinese_with_english_set();
+   std::printf("menu: ok\n");
+   return 0;
+ }
