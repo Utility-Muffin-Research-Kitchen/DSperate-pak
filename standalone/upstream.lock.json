@@ -35,7 +35,7 @@
       "-DDSPERATE_PGO_STRICT=ON",
       "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ],
-    "vulkan_note": "Off on purpose. v3 builds a Vulkan dma-buf presenter and an optional GPU 3D raster when vulkan/vulkan.h is found, and silently builds stubs when it is not. The pinned toolchain image carries no Vulkan headers, so the option is pinned off rather than left to whatever a build host happens to have installed. On the MLP1 the RGA presenter (V4L2 mem2mem, compiled from the sysroot's linux/videodev2.h) is the GPU-free path; the 3D raster is off by default upstream."
+    "vulkan_note": "Off on purpose. v3 builds a Vulkan dma-buf presenter and an optional GPU 3D raster when vulkan/vulkan.h is found, and silently builds stubs when it is not. The pinned toolchain image carries no Vulkan headers, so the option is pinned off rather than left to whatever a build host happens to have installed. That keeps 2.1.1's CPU scaling: the MLP1 has a Vulkan loader and Mali ICD, so turning the presenter on is a separate, device-measured change. v3's other presenter, the RGA through V4L2 mem2mem, declines on the MLP1, whose stock kernel exposes the RGA only as /dev/rga."
   },
   "pgo": {
     "dir": "standalone/pgo/aarch64",

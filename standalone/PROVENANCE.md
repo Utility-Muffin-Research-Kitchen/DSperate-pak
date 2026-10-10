@@ -8,8 +8,8 @@ Everything here is measured from the build, not from memory.
 | | |
 | --- | --- |
 | Upstream | `https://github.com/beebono/DSperate.git` |
-| Tag | `v2.1.1` |
-| Commit | `baec96501802bb04203cac07b420c67eff8054b8` |
+| Tag | `v3.0.3` |
+| Commit | `f5fa35ea19f966543feae086798701f134d89619` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
 | Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch` and `patches/0005-dsperate-ra-account-adapter.patch` (sha256-locked; see below) |
 
@@ -18,16 +18,19 @@ Everything here is measured from the build, not from memory.
 The five patches are locked by sha256 in `upstream.lock.json`; the build
 applies them in order and refuses a patch whose hash differs.
 
-Reviewed against [upstream v2.1.1](https://github.com/beebono/DSperate/releases/tag/v2.1.1)
-on 2026-09-21:
+Reviewed against [upstream v3.0.3](https://github.com/beebono/DSperate/releases/tag/v3.0.3)
+on 2026-10-10. Between v2.1.1 and v3.0.3 upstream rewrote comments across the
+whole tree (`46eb3b5`, `95c4a1f`) and moved code in the SDL frontend, so four
+of the five patches no longer applied. Each was re-anchored by hand; none of
+them changed what it does, and none became redundant:
 
 | Patch | Decision |
 | --- | --- |
-| 0001 archive/cache policy | Keep and rebase. v2.1.1 renamed `find_nds` to `find_rom` and widened the entry kinds to `.nds/.dsi/.srl/.cia`; the cache-root, single-entry and unsafe-path policies are still absent upstream, so they are re-expressed against `find_rom`. |
-| 0002 save durability | Keep. Re-anchored onto v2.1.1's larger SDL frontend; checked writes and firmware flush/close are unchanged. |
-| 0003 lid/resume | Keep. v2.1.1's lid implementation is unchanged and still fabricates a close on a device with no switch. |
-| 0004 deterministic `--version` | New. Prefers the lock's tag and commit over git so a source archive and a patched checkout report the same identity. |
-| 0005 Leaf account adapter | New. The `standalone-ra-account-v1` consumer; upstream has no equivalent. |
+| 0001 archive/cache policy | Keep and rebase. `find_rom`, `choose_cache` and the frontend's CLI parser, `apply_cli` key list and cache setup moved or were reworded; the logic is unchanged and the cache-root, single-entry and unsafe-path policies are still absent upstream. `--inspect-cart` runs before v3's ROM preload setting is applied, so it still maps the file without reading it whole. |
+| 0002 save durability | Keep and rebase. v3.0.3 still writes battery saves and states with an unchecked `fclose`, and the firmware override without a checked flush and close. |
+| 0003 lid/resume | Keep and rebase. Only the comment above the pulse changed; v3.0.3 still fabricates a close on a device with no switch. |
+| 0004 deterministic `--version` | Keep. Applies unchanged; `cmake/version.cmake` did not move. |
+| 0005 Leaf account adapter | Keep and rebase. The achievement client changed only in comments; the frontend hooks were re-anchored. The adapter's own three files apply unchanged. |
 
 `standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
 archive policy.
@@ -118,17 +121,20 @@ all checked, the temporary is removed on failure, and the previous committed
 file is left untouched. It also checks the firmware-override flush and close.
 A failed battery save stays dirty, so the next flush retries.
 
-Save loading now follows upstream v2.0.0. For a known chip, upstream loads the
-portion that fits and saves the original mismatched file as `.bak`; for an
-unknown chip, a supported save size selects the chip. This is different from
+Save loading follows upstream, unchanged since v2.0.0. For a known chip,
+upstream loads the portion that fits and saves the original mismatched file as
+`.bak`; for an unknown chip, a supported save size selects the chip. This is different from
 refusing every short save. The removed guard read into live SRAM before checking
 the count, so it did not actually undo partial reads even in the old patch.
 The checked-write helper covers DS battery saves and save-state files, not
 upstream's new DSi NAND/SD persistence or mismatch-backup writes.
 
-Upstream writes state format 3 and accepts DS format 2 from v1.15.1. This is a
-source-reviewed compatibility promise, not a device migration test. Back up your
-states before updating: v1.15.1 cannot read states newly written by v2.0.0.
+Upstream v3.0.3 writes state format 4 and reads only format 4
+(`src/core/state/state.h`: `FORMAT_VERSION` 4, `OLDEST_READABLE_VERSION` 4).
+States written by DSperate 2.x are format 3, and 3.0.3 refuses them with a
+message instead of loading them. Battery saves are unaffected: the save-chip
+handling, the `.bak` logic and the firmware override format are unchanged, and
+so are the state file names, so old states stay on the card untouched.
 
 ## Toolchain and flags
 
@@ -149,56 +155,82 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_NET` | `ON` | upstream default; vendored ENet and libslirp are linked statically; network sessions default off |
 | `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
-| `DSPERATE_CHEEVOS_VERSION` | `2.1.1` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
+| `DSPERATE_VULKAN` | `OFF` | the pinned image has no Vulkan headers; pinned off so the binary does not depend on the build host (see below) |
+| `DSPERATE_CHEEVOS_VERSION` | `3.0.3` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 | `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
 | `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
 | `DSPERATE_PGO_STRICT` | `ON` | keeps GCC's missing-profile and coverage-mismatch warnings; the build counts them and fails (see below) |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
-(`1789871851`). `DSPERATE_LOCK_VERSION=v2.1.1` and
-`DSPERATE_LOCK_COMMIT=baec965` are exported from the lock so `--version` is
+(`1791414282`). `DSPERATE_LOCK_VERSION=v3.0.3` and
+`DSPERATE_LOCK_COMMIT=f5fa35e` are exported from the lock so `--version` is
 deterministic.
+
+### Presenters
+
+v3 adds two ways to scale and compose the picture off the CPU into the scanout
+buffer (`video.gpu_present`): the Rockchip RGA through V4L2 mem2mem, and a
+Vulkan compute pass. Neither changes what the MLP1 does in this build, which
+scales on the CPU as 2.1.1 did:
+
+- The RGA presenter is compiled (the sysroot's `linux/videodev2.h` has
+  multi-planar mem2mem), but it declines on the MLP1: the stock kernel exposes
+  the RGA only as the vendor `/dev/rga`, not as a V4L2 node.
+- Upstream compiles the Vulkan presenter and the optional GPU 3D raster only
+  when it finds `vulkan/vulkan.h`, and otherwise builds stubs that decline. The
+  pinned image has no Vulkan headers, so `DSPERATE_VULKAN` is pinned `OFF`
+  rather than left to the build host. The MLP1 does have a Vulkan loader and
+  the Mali ICD, so turning the presenter on is a separate change that needs
+  its own device measurement.
+
+The wrapper names no video sink. With `SDL_VIDEODRIVER=wayland`, DSperate
+skips the direct-panel tiers and tries the Wayland dmabuf sink, then the window
+surface, then the renderer, as 2.1.1 did with `--no-disp --no-fbdev`. Naming
+`dmabuf` outright would drop the window-surface step. On the MLP1 a dmabuf
+allocation can fail (`/dev/dma_heap/cma-uncached: Cannot allocate memory`,
+seen with the launcher still running), and the renderer then cannot take over
+the window, so that launch would exit.
 
 ## Profile-guided optimisation
 
 The build consumes a PGO profile trained with **this same toolchain** (Buildroot
-GCC 12.3.0) and these same flags, against the patched v2.1.1 source. Upstream
-v2.1.1 ships profiles for GCC 10.5 and 12.4.0 only; CMake's fingerprint check
-refuses those, and a `.gcda` is bound to the compiler that wrote it, so they
-cannot be used here. The profile was retrained for the port rather than carried
-from v2.0.0, whose profile is tied to the v2.0.0 source. The profile in this revision
-was retrained over the tree with patch 0005 applied (MANIFEST date
-2026-09-21T20:20Z). The adapter's code sits in the never-trained achievement
-and SDL frontend groups, so a later change to it leaves every trained object's
-profile valid. The strict gate checks that on every build.
+GCC 12.3.0) and these same flags, against the patched v3.0.3 source. Upstream
+ships profiles for other GCC versions only; CMake's fingerprint check refuses
+those, and a `.gcda` is bound to the compiler that wrote it, so they cannot be
+used here. A profile is also bound to its source: every upstream bump needs a
+new one, and v3.0.3's CMake changed the fingerprint string itself.
 
-How the profile was produced (see `standalone/pgo/aarch64/MANIFEST`):
+`make pgo-train` (`standalone/pgo-train.sh`) produces it:
 
-- an instrumented headless build (`-DDSPERATE_PGO=generate`) configured with the
-  release flags, whose `pgo-fingerprint` matched the release build's
-  (`e5053f2d1f5b27e9ed70bda94b614845979aa599`);
-- seven of upstream's recorded scenes (`mlbis sm64 etody dbori meteos gsdd
-  nsmb`), with the real BIOS and firmware. `st` is absent because the recorded
-  save state is for another ROM revision, which the loader refuses;
-- the resulting `.gcda` files, the `MANIFEST`, and a sha256 over the whole
-  directory, pinned in `upstream.lock.json`. The build refuses a profile whose
-  directory hash does not match the lock, and CMake refuses one whose compiler
-  or flags (the MANIFEST fingerprint) do not match the build.
+- `build-dsperate.sh` prepares the pinned commit with the locked patches, the
+  same tree the release builds;
+- inside the pinned image, `pgo-train-in-container.sh` turns the lock's own
+  CMake flags into an instrumented headless build (`-DDSPERATE_PGO=generate`,
+  `-DDSPERATE_HEADLESS=ON`), so its `pgo-fingerprint` is the release build's
+  (`2d22e81dd634b4f0237a38ab089fbe6ee63d0368` for this revision). The image is
+  aarch64, so the binary runs natively on an arm64 Docker host;
+- it runs upstream's v3.0.3 scene list with the real BIOS and firmware: five
+  recorded replays (`mlbis sm64 etody dbori meteos`) and three boots from frame
+  0 (`gsdd st nsmb`), and records in the MANIFEST only the scenes that ran;
+- the `.gcda` files, the `MANIFEST`, and a sha256 over the whole directory are
+  written to `standalone/pgo/aarch64` and the lock. The build refuses a profile
+  whose directory hash does not match the lock, and CMake refuses one whose
+  compiler or flags (the MANIFEST fingerprint) do not match the build.
+
+The ROMs and BIOS stay outside the repository; `DS_ROMS` and `DS_BIOS` name
+them.
 
 Verification is part of every build. The release build itself runs with
 `-DDSPERATE_PGO_STRICT=ON`, and `build-in-container.sh` counts the warnings the
 same way upstream's `tools/pgo_refresh.sh` does: it fails if any object outside
-the never-trained groups (the SDL frontend, rcheevos and the achievement code,
-the standalone tools, miniz, the reference kernels) has no profile, if any
-function's control flow no longer matches its profile, or if no strict warning
-appears at all. The current build reports 49 objects without a profile, all in
-those groups (the adapter's two new files among them), and 0 mismatches. The strict flags are warning switches only; the
-binary is byte-identical to the non-strict build. `make test-pgo` checks,
-without a build or a device, that the profile directory, its MANIFEST and the
-build flags match the lock. Two clean `FORCE=1` builds with the locked profile
-agree byte for byte.
-Device performance of this candidate must be re-measured before any claim; no
-measurement of the retrained profile exists yet.
+the never-trained groups (the SDL frontend and the windowless video library
+only it links, rcheevos and the achievement code, the standalone tools, miniz,
+the reference kernels) has no profile, if any function's control flow no longer
+matches its profile, or if no strict warning appears at all. The strict flags
+are warning switches only; the binary is byte-identical to the non-strict
+build. `make test-pgo` checks, without a build or a device, that the profile
+directory, its MANIFEST and the build flags match the lock.
+Device performance of this candidate must be re-measured before any claim.
 
 ## Archives
 
@@ -210,7 +242,7 @@ Entries are sorted, every timestamp is `SOURCE_DATE_EPOCH`, owner and group are
 gzip header has no name or timestamp. `make test-archives` builds both twice
 with every input's mtime and the umask changed in between and requires the
 same sha256. `make test-version` extracts the source archive, rebuilds from it
-with no git, and requires the locked binary and `DSperate v2.1.1 (baec965)`.
+with no git, and requires the locked binary and `DSperate v3.0.3 (f5fa35e)`.
 
 ## Linkage
 
@@ -234,8 +266,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `87de031c4484830e3aaea5a8f1671afc77a78345dc6312b73c7f99e43517fafc` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,476,456 bytes | 14,224 bytes |
+| sha256 | `PENDING-FIRST-VERIFIED-BUILD` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | pending | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
@@ -277,18 +309,12 @@ does not confirm the real tier, so a silently stubbed build cannot ship.
 The dmabuf allocation, Weston import, orientation and performance are qualified
 on the device separately; the SDL window-surface route remains the fallback.
 
-## v2.0.0 verification (historical)
+## Earlier releases (historical)
 
-The v2.0.0 release checks below are retained as history. The v2.1.1 candidate in
-this revision is host-verified only: the patched source builds with the retrained
-GCC 12.3.0 profile to `87de031c...`, two clean `FORCE=1` builds agree, the strict
-profile check passes, `--version` reports
-`v2.1.1 (baec965)` from the lock, and `make check`, `make dist-pakrat` and
-`make dist-source` pass (118 wrapper checks, 14 MLP1 profile checks, the
-27 pinned account fixtures, the account state and bridge fault tests, and
-packaged-tree validation). Device requalification of v2.1.1, including the
-performance the new profile must re-measure and a native sign-in with this
-exact build, is pending.
+DSperate 2.1.1 (upstream v2.1.1, `baec965`, the same five patches) was
+published on 2026-09-26 after MLP1 qualification from 2026-09-24 to
+2026-09-26. The v3.0.3 candidate in this revision is not yet qualified on a
+device; the v2.0.0 release checks below are retained as history.
 
 Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
 runtime library allowlist are unchanged. The larger emulator contains the new
@@ -318,4 +344,4 @@ device reboot, the visible `.7z` refusal and stick-driven stylus input were
 verified there. Local Pak Rat install/reinstall/uninstall passed and preserved
 all 35 tested settings, save and state files byte for byte.
 DSiWare, NAND/SD persistence and networking are not
-qualified Leaf features in this update. The pak version is `2.0.0`.
+qualified Leaf features in that update. The pak version was `2.0.0`.
