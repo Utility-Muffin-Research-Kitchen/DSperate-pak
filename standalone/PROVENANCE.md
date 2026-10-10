@@ -11,6 +11,7 @@ Everything here is measured from the build, not from memory.
 | Tag | `v3.0.3` |
 | Commit | `f5fa35ea19f966543feae086798701f134d89619` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
+| Vulkan headers | `https://github.com/KhronosGroup/Vulkan-Headers.git` `v1.4.321` (`2cd90f9d20df57eac214c148f3aed885372ddcfe`), build-time only, Apache-2.0 OR MIT |
 | Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch` and `patches/0005-dsperate-ra-account-adapter.patch` (sha256-locked; see below) |
 
 ## Patches
@@ -155,7 +156,8 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_NET` | `ON` | upstream default; vendored ENet and libslirp are linked statically; network sessions default off |
 | `CMAKE_CXX_FLAGS` | `-DSDL_VIDEO_DRIVER_WAYLAND=1` | exposes `SDL_SysWMinfo`'s Wayland fields so the dmabuf tier compiles (see below) |
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
-| `DSPERATE_VULKAN` | `OFF` | the pinned image has no Vulkan headers; pinned off so the binary does not depend on the build host (see below) |
+| `DSPERATE_VULKAN` | `ON` | build the Vulkan presenter and the optional GPU 3D raster (see below) |
+| `DSPERATE_VULKAN_INCLUDE` | `/vulkan-include` | the pinned Khronos headers; the image has none, and the build fails if the presenter is not enabled |
 | `DSPERATE_CHEEVOS_VERSION` | `3.0.3` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 | `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
 | `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
@@ -169,19 +171,32 @@ deterministic.
 ### Presenters
 
 v3 adds two ways to scale and compose the picture off the CPU into the scanout
-buffer (`video.gpu_present`): the Rockchip RGA through V4L2 mem2mem, and a
-Vulkan compute pass. Neither changes what the MLP1 does in this build, which
-scales on the CPU as 2.1.1 did:
+buffer (`video.gpu_present`, on by default): the Rockchip RGA through V4L2
+mem2mem, and a Vulkan compute pass.
 
 - The RGA presenter is compiled (the sysroot's `linux/videodev2.h` has
   multi-planar mem2mem), but it declines on the MLP1: the stock kernel exposes
   the RGA only as the vendor `/dev/rga`, not as a V4L2 node.
-- Upstream compiles the Vulkan presenter and the optional GPU 3D raster only
-  when it finds `vulkan/vulkan.h`, and otherwise builds stubs that decline. The
-  pinned image has no Vulkan headers, so `DSPERATE_VULKAN` is pinned `OFF`
-  rather than left to the build host. The MLP1 does have a Vulkan loader and
-  the Mali ICD, so turning the presenter on is a separate change that needs
-  its own device measurement.
+- The Vulkan presenter is what runs on the MLP1. Upstream compiles it, and the
+  optional GPU 3D raster, only when it finds `vulkan/vulkan.h`, and otherwise
+  builds stubs that decline. The pinned image has no Vulkan headers, so the
+  build fetches the Khronos headers pinned in the lock (`vulkan_headers`, the
+  same release PPSSPP 1.20.4 vendors) by commit, mounts them at
+  `/vulkan-include`, and fails if the presenter is not enabled. Nothing links
+  `libvulkan`: the binary loads the device's loader with `dlopen`, and with it
+  the stock Mali driver. The log says
+  `video: GPU present on Mali-G52 ... (dma-buf import, dmabuf scanout)`.
+- GPU 3D (`video.gpu3d`) stays off, upstream's default; the CPU raster remains
+  the exact reference. A player can turn it on per game.
+
+The presenter decides one game in the qualification set. Measured on the MLP1
+at the normal 60 fps cap through real Leaf launches (frames 900 to 2400 of a
+boot with no input, two passes): Golden Sun: Dark Dawn holds 100% speed with
+5 of 3,000 frames over the 16.7 ms budget, against 91.8% speed and 958 frames
+over with the presenter off. New Super Mario Bros., Spirit Tracks and Mario
+Kart DS hold full speed either way. Leaf's g29p1 Mali driver, which PPSSPP
+uses, measured the same as the stock driver for the presenter, so the pak
+does not load it.
 
 The wrapper names no video sink. With `SDL_VIDEODRIVER=wayland`, DSperate
 skips the direct-panel tiers and tries the Wayland dmabuf sink, then the window
@@ -219,7 +234,7 @@ new one, and v3.0.3's CMake changed the fingerprint string itself.
 - it runs upstream's v3.0.3 scene list with the real BIOS and firmware: five
   recorded replays (`mlbis sm64 etody dbori meteos`) and three boots from frame
   0 (`gsdd st nsmb`), and records in the MANIFEST only the scenes that ran.
-  All eight ran for this profile (MANIFEST date 2026-10-10T19:24Z), with the
+  All eight ran for this profile (MANIFEST date 2026-10-10T19:28Z), with the
   Europe and USA dumps of the RetroAchievements set;
 - the `.gcda` files, the `MANIFEST`, and a sha256 over the whole directory are
   written to `standalone/pgo/aarch64` and the lock. The build refuses a profile
@@ -277,8 +292,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `75f8aebdc89b0f0290b859bd1e11e751c0432d2823fa622f89b86187d054fec7` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,509,448 bytes | 14,224 bytes |
+| sha256 | `62a5f6c750aeea445d0e9be2d4295233980781cdd3333ffd0091366084b0b1e4` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,677,384 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch

@@ -31,9 +31,9 @@ The next candidate updates the source pin to **DSperate v3.0.3** with five
 reviewed pak patches, rebased onto upstream's 3.0 rewrite without changing
 what they do, and its runtime manifest says `pak_version` `3.0.3`. It is not
 published yet. Two clean builds reproduce the profile-guided binary
-`75f8aebd...`, trained on all eight of upstream's v3.0.3 scenes, and
-`--version` reports `v3.0.3 (f5fa35e)`. MLP1 device qualification, including
-the speed comparison with 2.1.1, is pending.
+`62a5f6c7...`, trained on all eight of upstream's v3.0.3
+scenes, and `--version` reports `v3.0.3 (f5fa35e)`. MLP1 device qualification
+is pending; the speed comparison with 2.1.1 is below.
 
 What 3.0.3 changes for you:
 
@@ -41,11 +41,30 @@ What 3.0.3 changes for you:
   format, and 3.0.3 shows a message instead of loading an older state. Battery
   saves carry over unchanged, so progress you saved in the game is kept. Your
   old state files stay on the card.
+- **Heavy games run at full speed.** DSperate 3 is faster, and it scales the
+  picture on the GPU with Vulkan, on the MLP1's own driver. See the table below.
 - DSperate 3 uses a faster CPU timing model by default. If a game hangs or
   goes out of sync, set `timing = exact` under `[emu]` in that game's INI.
+- 3D can also be drawn on the GPU. It's off by default, because the CPU
+  drawing is the exact one. To try it in a heavy 3D game, set `gpu3d = true`
+  under `[video]` in that game's INI.
 - The controls stay the same. The MLP1 profile turns off DSperate 3's own
   face-button correction (`[pad] face_fix = off`), which would otherwise swap
   X and Y on this pad.
+
+Measured on an MLP1 through real Leaf launches, at the normal 60 fps cap, over
+frames 900 to 2400 of each game's boot with no input (frames 1200 to 3000 for
+New Super Mario Bros.), two passes each:
+
+| Game | 2.1.1 speed | 2.1.1 frames over 16.7 ms | 3.0.3 speed | 3.0.3 frames over 16.7 ms |
+| --- | --- | --- | --- | --- |
+| New Super Mario Bros. | 94.5% | 57% | 100% | 1 of 3,600 |
+| Golden Sun: Dark Dawn | 95.5% | 39% | 100% | 0.2% |
+| The Legend of Zelda: Spirit Tracks | 92.7% | 50% | 100% | 0.5% |
+| Mario Kart DS | 96.2% | 36% | 99.8% | 0.7% to 1.1%, and 7% in one of four passes |
+
+Audio underruns over each run fell from 230 to 515 on 2.1.1 to 19 or fewer.
+Without the Vulkan presenter, 3.0.3 runs Golden Sun: Dark Dawn at only 91.8%.
 
 DSperate 2.1.1 passed MLP1 device qualification from 2026-09-24 to
 2026-09-26: native sign-in and achievement set loading, a fresh account import
