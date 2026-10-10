@@ -339,8 +339,11 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 DSperate 2.1.1 (upstream v2.1.1, `baec965`, the same five patches) was
 published on 2026-09-26 after MLP1 qualification from 2026-09-24 to
-2026-09-26. The v3.0.3 candidate in this revision is not yet qualified on a
-device; the v2.0.0 release checks below are retained as history.
+2026-09-26. The v3.0.3 candidate in this revision (`62a5f6c7...`) passed MLP1
+qualification on 2026-10-10 (see the README). Not re-run for 3.0.3, because
+the code behind them is unchanged and the host tests replay them: the DraStic
+fallback while uninstalled, the account fault rows and the `.7z` refusal. The
+v2.0.0 release checks below are retained as history.
 
 Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
 runtime library allowlist are unchanged. The larger emulator contains the new

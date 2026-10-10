@@ -32,8 +32,20 @@ reviewed pak patches, rebased onto upstream's 3.0 rewrite without changing
 what they do, and its runtime manifest says `pak_version` `3.0.3`. It is not
 published yet. Two clean builds reproduce the profile-guided binary
 `62a5f6c7...`, trained on all eight of upstream's v3.0.3
-scenes, and `--version` reports `v3.0.3 (f5fa35e)`. MLP1 device qualification
-is pending; the speed comparison with 2.1.1 is below.
+scenes, and `--version` reports `v3.0.3 (f5fa35e)`.
+
+This exact build passed MLP1 device qualification on 2026-10-10. It updated
+over 2.1.1 through Pak Rat with every battery save, save state and setting
+unchanged, and the defaults update added `face_fix = off` beside your X and Y
+binds. Every button matched its printed label, the stick and R2 drove the
+stylus, and Menu opened the pause menu. A 2.x save state was refused with a
+message while the game kept running; new states saved and loaded, and fast
+forward and the layout switch worked. The picture came back after a suspend
+while playing and while paused. RetroAchievements signed in with the account
+saved in Leaf, and the account page said `MANAGED BY LEAF`. Uninstalling and
+reinstalling through Pak Rat kept all 27 DSperate data files byte for byte and
+kept DSperate as the game's emulator. The speed comparison with 2.1.1 is
+below.
 
 What 3.0.3 changes for you:
 
