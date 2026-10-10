@@ -71,6 +71,7 @@ docker run --rm \
   -v "$SCRATCH/work":/work \
   -v "$SCRATCH/out":/out \
   -v "$X/standalone":/standalone:ro \
+  -v "$X/vulkan-headers/include":/vulkan-include:ro \
   -w /src \
   "${IMAGE%%:*}@$(lock "$XLOCK" toolchain digest)" \
   bash /standalone/build-in-container.sh >"$SCRATCH/build.log" 2>&1 \

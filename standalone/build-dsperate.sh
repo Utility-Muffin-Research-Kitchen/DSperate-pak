@@ -20,6 +20,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK="$REPO_ROOT/standalone/upstream.lock.json"
 BUILD_DIR="${BUILD_DIR:-$REPO_ROOT/build}"
 SRC_DIR="$BUILD_DIR/dsperate-src"
+VK_DIR="$BUILD_DIR/vulkan-headers"
 WORK_DIR="$BUILD_DIR/dsperate-work"
 OUT_DIR="$BUILD_DIR/standalone"
 
@@ -83,6 +84,9 @@ CHEEVOS_VERSION="$(lock build cheevos_version)"
 PGO_MODE="$(lock build pgo)"
 APP_VERSION="$(lock version tag)"
 APP_COMMIT="$(lock version commit)"
+VK_URL="$(lock vulkan_headers source_url)"
+VK_COMMIT="$(lock vulkan_headers commit)"
+VK_INCLUDE="$VK_DIR/$(lock vulkan_headers include_dir)"
 
 # A tag can move; a digest cannot.
 IMAGE_REF="${IMAGE%%:*}@${DIGEST}"
@@ -106,6 +110,24 @@ else
   fi
   [ "$(git -C "$SRC_DIR" rev-parse HEAD)" = "$SOURCE_COMMIT" ] \
     || die "checked out $(git -C "$SRC_DIR" rev-parse HEAD), lock says $SOURCE_COMMIT"
+
+  # The Vulkan headers are a build input like the source: fetched by commit,
+  # reset to it every build, and only ever read.
+  if [ ! -d "$VK_DIR/.git" ]; then
+    say "cloning $VK_URL (one time)"
+    git init -q "$VK_DIR"
+    git -C "$VK_DIR" remote add origin "$VK_URL"
+  fi
+  if [ "$(git -C "$VK_DIR" rev-parse -q --verify HEAD 2>/dev/null)" != "$VK_COMMIT" ]; then
+    say "fetching pinned Vulkan headers $VK_COMMIT"
+    git -C "$VK_DIR" fetch -q --depth 1 origin "$VK_COMMIT"
+    git -C "$VK_DIR" checkout -q -f --detach FETCH_HEAD
+  fi
+  git -C "$VK_DIR" reset -q --hard "$VK_COMMIT"
+  git -C "$VK_DIR" clean -qfdx
+  [ "$(git -C "$VK_DIR" rev-parse HEAD)" = "$VK_COMMIT" ] \
+    || die "Vulkan headers at $(git -C "$VK_DIR" rev-parse HEAD), lock says $VK_COMMIT"
+  [ -f "$VK_INCLUDE/vulkan/vulkan.h" ] || die "no vulkan/vulkan.h under $VK_INCLUDE"
 
   # Reset to the pinned commit and apply this pak's patches. A cached clone can
   # drift (a previous run's patch, a hand edit), so every build starts from the
@@ -184,6 +206,7 @@ EOF
     -v "$WORK_DIR":/work \
     -v "$OUT_DIR":/out \
     -v "$REPO_ROOT/standalone":/standalone:ro \
+    -v "$VK_INCLUDE":/vulkan-include:ro \
     -w /src \
     "$IMAGE_REF" \
     bash /standalone/build-in-container.sh

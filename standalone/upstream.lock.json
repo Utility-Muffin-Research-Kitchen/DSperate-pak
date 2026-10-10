@@ -9,6 +9,15 @@
     "license": "GPL-3.0-or-later",
     "license_path_in_source": "LICENSE"
   },
+  "vulkan_headers": {
+    "source_url": "https://github.com/KhronosGroup/Vulkan-Headers.git",
+    "tag": "v1.4.321",
+    "commit": "2cd90f9d20df57eac214c148f3aed885372ddcfe",
+    "license": "Apache-2.0 OR MIT",
+    "license_path_in_source": "LICENSE.md",
+    "include_dir": "include",
+    "note": "Build-time headers only, fetched by commit like the DSperate source and mounted read-only at /vulkan-include. The same release PPSSPP 1.20.4 vendors. The corresponding-source archive carries include/ and the licence."
+  },
   "build": {
     "backend": "sdl",
     "sdl2": "device-provided libSDL2-2.0.so.0, linked dynamically; the MLP1 ships 2.28.5 built with its Wayland video driver",
@@ -29,24 +38,25 @@
       "-DDSPERATE_HEADLESS=OFF",
       "-DDSPERATE_CHEEVOS=ON",
       "-DDSPERATE_WAYLAND=ON",
-      "-DDSPERATE_VULKAN=OFF",
+      "-DDSPERATE_VULKAN=ON",
+      "-DDSPERATE_VULKAN_INCLUDE=/vulkan-include",
       "-DDSPERATE_CHEEVOS_VERSION=3.0.3",
       "-DDSPERATE_PGO=use",
       "-DDSPERATE_PGO_STRICT=ON",
       "-DDSPERATE_PGO_DIR=/standalone/pgo/aarch64"
     ],
-    "vulkan_note": "Off on purpose. v3 builds a Vulkan dma-buf presenter and an optional GPU 3D raster when vulkan/vulkan.h is found, and silently builds stubs when it is not. The pinned toolchain image carries no Vulkan headers, so the option is pinned off rather than left to whatever a build host happens to have installed. That keeps 2.1.1's CPU scaling: the MLP1 has a Vulkan loader and Mali ICD, so turning the presenter on is a separate, device-measured change. v3's other presenter, the RGA through V4L2 mem2mem, declines on the MLP1, whose stock kernel exposes the RGA only as /dev/rga."
+    "vulkan_note": "On. DSperate 3 builds its Vulkan dma-buf presenter and the optional GPU 3D raster against the Khronos headers pinned under vulkan_headers, mounted at /vulkan-include; nothing links libvulkan, which the binary dlopens on the device. On the MLP1 the presenter runs on the stock Mali driver and is what holds Golden Sun: Dark Dawn at full speed. GPU 3D stays off by default (upstream's default). v3's other presenter, the RGA through V4L2 mem2mem, declines on the MLP1, whose stock kernel exposes the RGA only as /dev/rga."
   },
   "pgo": {
     "dir": "standalone/pgo/aarch64",
-    "sha256": "f427756aaf5afa6fb29ceb650bd57a81c2ad049fbe796de35c198a1aaa1098a1",
-    "files": 103,
+    "sha256": "cffe0f962baf044aabeb49fbf3d281ff00885a6141324edb95e71f5582da6b2c",
+    "files": 104,
     "fingerprint": "2d22e81dd634b4f0237a38ab089fbe6ee63d0368",
     "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
     "source_commit": "f5fa35ea19f966543feae086798701f134d89619",
-    "date": "2026-10-10T19:24Z",
+    "date": "2026-10-10T19:28Z",
     "scenes": "mlbis sm64 etody dbori meteos gsdd st nsmb",
-    "note": "Trained by standalone/pgo-train.sh with this pak's toolchain and the lock's own flags against the patched v3.0.3 tree, so the fingerprint matches the release build. The scenes are upstream v3.0.3's list: five recorded replays and three boots from frame 0, all eight of which ran (st, skipped for 2.1.1 because its old save-state scene was for another ROM revision, is a boot scene now). The headless frontend is the training build; the SDL frontend and the windowless video library only it links, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
+    "note": "Trained by standalone/pgo-train.sh with this pak's toolchain and the lock's own flags against the patched v3.0.3 tree with the Vulkan presenter built, so the fingerprint matches the release build. The scenes are upstream v3.0.3's list: five recorded replays and three boots from frame 0, all eight of which ran (st, skipped for 2.1.1 because its old save-state scene was for another ROM revision, is a boot scene now). The headless frontend is the training build; the SDL frontend and the windowless video library only it links, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
   },
   "version": {
     "tag": "v3.0.3",
@@ -93,8 +103,8 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "75f8aebdc89b0f0290b859bd1e11e751c0432d2823fa622f89b86187d054fec7",
-    "size_bytes": 4509448,
+    "sha256": "62a5f6c750aeea445d0e9be2d4295233980781cdd3333ffd0091366084b0b1e4",
+    "size_bytes": 4677384,
     "note": "Recorded after two clean FORCE=1 PGO builds agree on the v3.0.3 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {

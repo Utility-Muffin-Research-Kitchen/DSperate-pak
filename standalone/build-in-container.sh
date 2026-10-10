@@ -35,9 +35,10 @@ log "configuring (SDL frontend, AArch64 JIT + NEON, Wayland dmabuf tier)"
 # exposes the header fields; it cannot add a Wayland driver to a runtime SDL
 # that lacks one. See standalone/PROVENANCE.md.
 #
-# Vulkan is pinned off: upstream builds its Vulkan presenter and GPU 3D raster
-# only when vulkan/vulkan.h is found, and this image has none, so leaving the
-# option on would make the binary depend on whatever the build host carries.
+# Vulkan: upstream builds its Vulkan presenter and GPU 3D raster only when it
+# finds vulkan/vulkan.h, and this image has none, so the lock's pinned Khronos
+# headers are mounted at /vulkan-include and named outright. Nothing links
+# libvulkan; the binary dlopens the device's loader.
 cmake -S /src -B "$BUILD" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/standalone/mlp1-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -46,7 +47,8 @@ cmake -S /src -B "$BUILD" -G Ninja \
   -DDSPERATE_HEADLESS=OFF \
   -DDSPERATE_CHEEVOS=ON \
   -DDSPERATE_WAYLAND=ON \
-  -DDSPERATE_VULKAN=OFF \
+  -DDSPERATE_VULKAN=ON \
+  -DDSPERATE_VULKAN_INCLUDE=/vulkan-include \
   -DDSPERATE_CHEEVOS_VERSION="$CHEEVOS_VERSION" \
   -DDSPERATE_PGO=use \
   -DDSPERATE_PGO_STRICT=ON \
@@ -73,6 +75,11 @@ if ! grep -q 'DSPERATE_SDL2_HAS_WAYLAND:INTERNAL=1' "$BUILD/CMakeCache.txt"; the
   exit 1
 fi
 log "Wayland probe passed; the dmabuf tier is built"
+# Without the headers upstream quietly builds stubs that decline, which would
+# ship a binary that cannot hold Golden Sun: Dark Dawn at full speed.
+grep -q 'Vulkan presenter and 3D raster enabled' /work/configure.log \
+  || { echo "build-in-container: the Vulkan presenter was not enabled" >&2; exit 1; }
+log "Vulkan presenter and GPU 3D raster are built"
 
 log "compiling (long)"
 cmake --build "$BUILD" --target dsperate -j"$JOBS" >/work/build.log 2>&1 || {

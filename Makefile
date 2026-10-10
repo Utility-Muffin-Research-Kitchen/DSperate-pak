@@ -97,6 +97,8 @@ package-mlp1: standalone
 		printf '\n=== %s ===\n\n' "$$notice"; \
 		cat "$(BUILD)/dsperate-src/$$notice" || exit 1; \
 	 done > "$(PACKAGE)/LICENSE-THIRD-PARTY.txt"
+	@printf '\n=== %s ===\n\n' "Khronos Vulkan-Headers (build-time headers)" >> "$(PACKAGE)/LICENSE-THIRD-PARTY.txt"
+	@cat "$(BUILD)/vulkan-headers/LICENSE.md" >> "$(PACKAGE)/LICENSE-THIRD-PARTY.txt"
 	@echo "packaged $(PACKAGE)"
 	@echo "note: no launch.sh -- this is a pure content pak and is not listed in Apps."
 
@@ -120,6 +122,8 @@ dist-source:
 	@$(IN_IMAGE) python3 "$(REPO_ROOT)/scripts/make-archive.py" tar \
 		--epoch "$(SOURCE_EPOCH)" --out "$(SOURCE_ARCHIVE)" \
 		--member dsperate-src="$(BUILD)/dsperate-src" \
+		--member vulkan-headers/include="$(BUILD)/vulkan-headers/include" \
+		--member vulkan-headers/LICENSE.md="$(BUILD)/vulkan-headers/LICENSE.md" \
 		--member standalone="$(REPO_ROOT)/standalone" \
 		--member LICENSES="$(REPO_ROOT)/LICENSES" \
 		--member Makefile="$(REPO_ROOT)/Makefile" \

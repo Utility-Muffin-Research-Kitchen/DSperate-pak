@@ -75,6 +75,7 @@ docker run --rm \
   -v "$TRAIN_DIR/work":/work \
   -v "$TRAIN_DIR/profile":/pgo-out \
   -v "$REPO_ROOT/standalone":/standalone:ro \
+  -v "$BUILD_DIR/vulkan-headers/$(lock vulkan_headers include_dir)":/vulkan-include:ro \
   -v "$DS_ROMS":/roms:ro \
   -v "$BIOS9":/bios/bios9.bin:ro \
   -v "$BIOS7":/bios/bios7.bin:ro \

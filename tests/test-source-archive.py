@@ -17,7 +17,9 @@ with tarfile.open(sys.argv[1]) as archive:
                  "standalone/build-dsperate.sh", "standalone/build-in-container.sh",
                  "standalone/mlp1-toolchain.cmake", "standalone/verify-binary.sh",
                  lock["notice"]["source"], lock["device"]["allowed_libraries"],
-                 "LICENSES/REPO-LICENSE.txt", "Makefile", "pak/scripts/run.sh"):
+                 "LICENSES/REPO-LICENSE.txt", "Makefile", "pak/scripts/run.sh",
+                 "vulkan-headers/include/vulkan/vulkan.h", "vulkan-headers/include/vulkan/vulkan_core.h",
+                 "vulkan-headers/LICENSE.md"):
         assert read(name), f"missing source input: {name}"
     for patch in lock["patches"]:
         assert hashlib.sha256(read("standalone/patches/" + patch["file"])).hexdigest() == patch["sha256"]
