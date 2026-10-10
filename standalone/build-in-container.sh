@@ -34,6 +34,10 @@ log "configuring (SDL frontend, AArch64 JIT + NEON, Wayland dmabuf tier)"
 # Wayland-capable SDL, which the binary is dynamically linked to. This only
 # exposes the header fields; it cannot add a Wayland driver to a runtime SDL
 # that lacks one. See standalone/PROVENANCE.md.
+#
+# Vulkan is pinned off: upstream builds its Vulkan presenter and GPU 3D raster
+# only when vulkan/vulkan.h is found, and this image has none, so leaving the
+# option on would make the binary depend on whatever the build host carries.
 cmake -S /src -B "$BUILD" -G Ninja \
   -DCMAKE_TOOLCHAIN_FILE=/standalone/mlp1-toolchain.cmake \
   -DCMAKE_BUILD_TYPE=RelWithDebInfo \
@@ -42,6 +46,7 @@ cmake -S /src -B "$BUILD" -G Ninja \
   -DDSPERATE_HEADLESS=OFF \
   -DDSPERATE_CHEEVOS=ON \
   -DDSPERATE_WAYLAND=ON \
+  -DDSPERATE_VULKAN=OFF \
   -DDSPERATE_CHEEVOS_VERSION="$CHEEVOS_VERSION" \
   -DDSPERATE_PGO=use \
   -DDSPERATE_PGO_STRICT=ON \
@@ -80,13 +85,13 @@ cmake --build "$BUILD" --target dsperate -j"$JOBS" >/work/build.log 2>&1 || {
 # "profile count data file not found" and per-function "control flow ...
 # does not match" warnings in the log instead of silencing them. Whole groups
 # are never trained, because a headless training run never executes them: the
-# SDL frontend, the achievement code, the standalone tools, miniz's inflate and
-# the reference kernels. Anything outside those groups without a profile is a
+# SDL frontend and the windowless video library only it links, the achievement
+# code, the standalone tools, miniz's inflate and the reference kernels. Anything outside those groups without a profile is a
 # scene that stopped running, and a control-flow mismatch is a function that
 # changed since the profile was made. Either one means the shipped binary is
 # not the profile-guided build the lock describes, so the build fails. This is
 # the same count upstream's tools/pgo_refresh.sh prints after a refresh.
-PGO_UNTRAINED='src/frontend/sdl/|rcheevos|cheevos|tools#|miniz|kernels_ref'
+PGO_UNTRAINED='src/frontend/sdl/|src/frontend/video/|rcheevos|cheevos|tools#|miniz|kernels_ref'
 pgo_missing="$(grep -c 'data file not found' /work/build.log || true)"
 pgo_unexpected="$(grep 'data file not found' /work/build.log | grep -cEv "$PGO_UNTRAINED" || true)"
 pgo_mismatch="$(grep -c 'control flow of function' /work/build.log || true)"
