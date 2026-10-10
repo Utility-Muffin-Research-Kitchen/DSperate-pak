@@ -186,10 +186,17 @@ scales on the CPU as 2.1.1 did:
 The wrapper names no video sink. With `SDL_VIDEODRIVER=wayland`, DSperate
 skips the direct-panel tiers and tries the Wayland dmabuf sink, then the window
 surface, then the renderer, as 2.1.1 did with `--no-disp --no-fbdev`. Naming
-`dmabuf` outright would drop the window-surface step. On the MLP1 a dmabuf
-allocation can fail (`/dev/dma_heap/cma-uncached: Cannot allocate memory`,
-seen with the launcher still running), and the renderer then cannot take over
-the window, so that launch would exit.
+`dmabuf` outright would drop the window-surface step: if the dmabuf allocation
+failed, the renderer could not take over the window and the launch would exit.
+
+The wrapper does pin the dmabuf heap, with `DS_DMA_HEAP=system-uncached`. v3's
+dmabuf sink allocates four panel-sized buffers (five under GPU present) and
+prefers the CMA heap. The MLP1's CMA pool is 16 MB and page cache usually fills
+it, so in real Leaf launches the allocation failed
+(`/dev/dma_heap/cma-uncached: alloc: Cannot allocate memory`) and the picture
+fell back to the window surface, which cost about 2 ms per frame to present.
+Weston accepts buffers from the non-contiguous heap, and with it the present
+step takes about 0.1 ms.
 
 ## Profile-guided optimisation
 

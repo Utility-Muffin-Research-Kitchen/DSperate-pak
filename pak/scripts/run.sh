@@ -518,6 +518,12 @@ export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export SDL_JOYSTICK_DISABLE_UDEV=1
 unset DS_ROTATE
+# The Wayland dmabuf sink allocates four panel-sized buffers (five under GPU
+# present). DSperate prefers the CMA heap, but the MLP1's pool is 16 MB and
+# page cache usually fills it, so the allocation fails and the picture falls
+# back to the slower window surface. Weston on the MLP1 accepts buffers from
+# the non-contiguous heap, so name it and skip the CMA attempt.
+export DS_DMA_HEAP=system-uncached
 
 # The frozen controller roster that Jawaka publishes for the launch is kept.
 # Without one, SDL scans for itself; a direct-launch fallback is not invented.

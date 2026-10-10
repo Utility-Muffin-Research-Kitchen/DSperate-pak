@@ -52,7 +52,7 @@ for v in UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME 
     eval "set_=\${$v+1} val_=\${$v-}"
     if [ -n "$set_" ]; then printf '%s=[%s]\n' "$v" "$val_" >>"$DS_FAKE_OUT.env"; fi
 done
-printf '%s\n' "$SDL_VIDEODRIVER" "${DS_ROTATE-unset}" >"$DS_FAKE_OUT.video"
+printf '%s\n' "$SDL_VIDEODRIVER" "${DS_ROTATE-unset}" "heap=${DS_DMA_HEAP-unset}" >"$DS_FAKE_OUT.video"
 FAKE
 cat >"$PAK/bin/dsperate-notice" <<'FAKE'
 #!/bin/sh
@@ -148,9 +148,10 @@ run_wrapper "$ROM"
 check_contains "$GAME_INI" "stick_deadzone = 0" "explicit calibrated setting preserved"
 check_contains "$SD/.userdata/mlp1/dsperate/dsperate.ini" "stick_deadzone = 12000" "global raw default preserved"
 
-( SDL_VIDEODRIVER=kmsdrm DS_ROTATE=90 run_wrapper "$ROM" )
+( SDL_VIDEODRIVER=kmsdrm DS_ROTATE=90 DS_DMA_HEAP=cma-uncached run_wrapper "$ROM" )
 check_contains "$OUT.video" "wayland" "forces Weston backend"
 check_contains "$OUT.video" "unset" "clears rotation"
+check_contains "$OUT.video" "heap=system-uncached" "pins the non-contiguous dmabuf heap"
 
 # --- optional BIOS -----------------------------------------------------------
 : >"$SD/BIOS/NDS/nds_bios_arm9.bin"
