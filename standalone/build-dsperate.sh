@@ -8,6 +8,9 @@
 #
 #   ./standalone/build-dsperate.sh              build into build/, verify the lock
 #   FORCE=1 ./standalone/build-dsperate.sh      rebuild from a clean tree
+#   PREPARE_ONLY=1 ./standalone/build-dsperate.sh
+#                                               fetch and patch the source only
+#                                               (standalone/pgo-train.sh uses it)
 #
 # The source clone and the CMake build tree are cached under build/ so a second
 # run is cheap.
@@ -86,7 +89,7 @@ IMAGE_REF="${IMAGE%%:*}@${DIGEST}"
 
 mkdir -p "$BUILD_DIR" "$WORK_DIR" "$OUT_DIR"
 
-if [ -f "$OUT_DIR/$ARTIFACT" ] && [ "${FORCE:-0}" != "1" ]; then
+if [ -f "$OUT_DIR/$ARTIFACT" ] && [ "${FORCE:-0}" != "1" ] && [ "${PREPARE_ONLY:-0}" != "1" ]; then
   say "binary already present (FORCE=1 to rebuild)"
 else
   if [ ! -d "$SRC_DIR/.git" ]; then
@@ -142,6 +145,11 @@ PY
     done <<EOF
 $PATCH_ROWS
 EOF
+  fi
+
+  if [ "${PREPARE_ONLY:-0}" = "1" ]; then
+    say "source prepared at $SRC_DIR (pinned commit and locked patches)"
+    exit 0
   fi
 
   if [ "$PGO_MODE" = "use" ]; then

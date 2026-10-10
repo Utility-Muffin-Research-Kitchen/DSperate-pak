@@ -6,6 +6,7 @@
 # a path starting with ../, it does not belong in this file.
 #
 #   make standalone     build the pinned DSperate binary (long; cached)
+#   make pgo-train      retrain the PGO profile (DS_ROMS=... DS_BIOS=...)
 #   make package-mlp1   assemble build/package/DSperate.pak
 #   make dist-pakrat    zip it into build/dist/DSperate.mlp1.pak.zip
 #   make dist-source    GPL corresponding-source archive for the shipped binary
@@ -53,18 +54,23 @@ IN_IMAGE = docker run --rm --user "$$(id -u):$$(id -g)" -e HOME=/tmp \
 	-v "$(REPO_ROOT)":"$(REPO_ROOT)":ro -v "$(BUILD)":"$(BUILD)" -w "$(REPO_ROOT)" \
 	"$(IMAGE_REF)"
 
-.PHONY: all standalone verify-standalone package-mlp1 dist-pakrat dist-source validate test-wrapper test-profile test-pgo test-lock test-docs test-ra-account test-validate-pak test-archive-cli test-version test-archives check clean distclean help
+.PHONY: all standalone verify-standalone pgo-train package-mlp1 dist-pakrat dist-source validate test-wrapper test-profile test-pgo test-lock test-docs test-ra-account test-validate-pak test-archive-cli test-version test-archives check clean distclean help
 
 all: dist-pakrat
 
 help:
-	@sed -n '1,24p' $(lastword $(MAKEFILE_LIST))
+	@sed -n '1,26p' $(lastword $(MAKEFILE_LIST))
 
 standalone:
 	@"$(REPO_ROOT)/standalone/build-dsperate.sh"
 
 verify-standalone:
 	@FORCE=0 "$(REPO_ROOT)/standalone/build-dsperate.sh"
+
+# A new profile for the pinned source, trained in the pinned image. Needs the
+# scene ROMs and the real DS BIOS and firmware, which never enter the repo.
+pgo-train:
+	@"$(REPO_ROOT)/standalone/pgo-train.sh"
 
 # A pure content pak carrying a standalone executable. The manifest declares
 # the wrapper as its `type: "path"` core; the compiled binary, its first-run
