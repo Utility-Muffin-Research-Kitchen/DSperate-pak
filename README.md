@@ -30,10 +30,10 @@ sign-in as it was.
 The next candidate updates the source pin to **DSperate v3.0.3** with five
 reviewed pak patches, rebased onto upstream's 3.0 rewrite without changing
 what they do, and its runtime manifest says `pak_version` `3.0.3`. It is not
-published yet. Its profile-guided binary still has to be trained for the new
-source and built twice to the same bytes, and the build has to pass MLP1
-device qualification, so no 3.0.3 binary is cited here yet. `--version` will
-report `v3.0.3 (f5fa35e)`.
+published yet. Two clean builds reproduce the profile-guided binary
+`75f8aebd...`, trained on all eight of upstream's v3.0.3 scenes, and
+`--version` reports `v3.0.3 (f5fa35e)`. MLP1 device qualification, including
+the speed comparison with 2.1.1, is pending.
 
 What 3.0.3 changes for you:
 

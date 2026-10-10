@@ -211,7 +211,9 @@ new one, and v3.0.3's CMake changed the fingerprint string itself.
   aarch64, so the binary runs natively on an arm64 Docker host;
 - it runs upstream's v3.0.3 scene list with the real BIOS and firmware: five
   recorded replays (`mlbis sm64 etody dbori meteos`) and three boots from frame
-  0 (`gsdd st nsmb`), and records in the MANIFEST only the scenes that ran;
+  0 (`gsdd st nsmb`), and records in the MANIFEST only the scenes that ran.
+  All eight ran for this profile (MANIFEST date 2026-10-10T19:24Z), with the
+  Europe and USA dumps of the RetroAchievements set;
 - the `.gcda` files, the `MANIFEST`, and a sha256 over the whole directory are
   written to `standalone/pgo/aarch64` and the lock. The build refuses a profile
   whose directory hash does not match the lock, and CMake refuses one whose
@@ -226,10 +228,12 @@ same way upstream's `tools/pgo_refresh.sh` does: it fails if any object outside
 the never-trained groups (the SDL frontend and the windowless video library
 only it links, rcheevos and the achievement code, the standalone tools, miniz,
 the reference kernels) has no profile, if any function's control flow no longer
-matches its profile, or if no strict warning appears at all. The strict flags
-are warning switches only; the binary is byte-identical to the non-strict
+matches its profile, or if no strict warning appears at all. The current build
+reports 55 objects without a profile, all in those groups, and 0 mismatches.
+The strict flags are warning switches only; the binary is byte-identical to the non-strict
 build. `make test-pgo` checks, without a build or a device, that the profile
-directory, its MANIFEST and the build flags match the lock.
+directory, its MANIFEST and the build flags match the lock. Two clean
+`FORCE=1` builds with the locked profile agree byte for byte.
 Device performance of this candidate must be re-measured before any claim.
 
 ## Archives
@@ -266,8 +270,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `PENDING-FIRST-VERIFIED-BUILD` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | pending | 14,224 bytes |
+| sha256 | `75f8aebdc89b0f0290b859bd1e11e751c0432d2823fa622f89b86187d054fec7` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,509,448 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
