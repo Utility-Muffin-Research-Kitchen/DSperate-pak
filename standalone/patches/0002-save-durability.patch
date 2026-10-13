@@ -1,8 +1,8 @@
 diff --git a/src/core/nds.cpp b/src/core/nds.cpp
-index 3f23f6a..24e2043 100644
+index dfca8de..6d0d68e 100644
 --- a/src/core/nds.cpp
 +++ b/src/core/nds.cpp
-@@ -280,7 +280,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
+@@ -274,7 +274,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
        f.write(reinterpret_cast<const char*>(&page), 4);
        f.write(reinterpret_cast<const char*>(firmware.data() + page * FW_PAGE), FW_PAGE);
      }
@@ -11,19 +11,19 @@ index 3f23f6a..24e2043 100644
 +    f.close();
 +    if (f.fail()) { err = "close failed"; return false; }
    }
-   // Rename over the old one, so an interrupted write cannot leave a truncated
-   // override that would boot the console with half of someone's settings.
+   // Rename over the old one so an interrupted write can't leave a truncated override.
+   if (std::rename(tmp.c_str(), path.c_str()) != 0) { err = "cannot replace"; std::remove(tmp.c_str()); return false; }
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 0377099..48a1d25 100644
+index 52d5c18..de5692c 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -305,15 +305,35 @@ void load_save(NDS& nds, const std::string& path) {
+@@ -326,15 +326,35 @@ void load_save(NDS& nds, const std::string& path) {
    }
  }
  
 -void write_save(NDS& nds, const std::string& path) {
 -  if (!nds.cart || nds.cart->sram().empty()) return;
--  // Write-then-rename so a power cut mid-write leaves the previous file.
+-  // Write-then-rename: a power cut mid-write leaves the previous file.
 +// Write `size` bytes to `path` durably: to a temporary beside it, flushed and
 +// synchronized to the disk, then renamed over the target. False with the
 +// reason in `err` when any step fails, leaving the previous file in place.
@@ -60,7 +60,7 @@ index 0377099..48a1d25 100644
    nds.cart->clear_sram_dirty();
  }
  
-@@ -548,12 +568,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
+@@ -494,12 +514,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
    if (!nds.save_state(w, err)) { std::fprintf(stderr, "state: cannot save: %s\n", err.c_str()); return false; }
    write_layout_chunk(w, layout);
    write_cheevos_chunk(w);

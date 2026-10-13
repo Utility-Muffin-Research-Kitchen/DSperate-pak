@@ -375,7 +375,9 @@ if DEFAULTS_VERSION="$(read_version "$DEFAULTS_VERSION_FILE")"; then
         # Revision 2 added the Menu binding. Revision 3 moved the stylus to the
         # one stick the MLP1 has and added its tap buttons. Revision 4 binds the
         # face X/Y buttons explicitly, because the MLP1 pad's SDL mapping names
-        # them by printed label and the stock defaults swapped them.
+        # them by printed label and the stock defaults swapped them. Revision 5
+        # turns off DSperate 3's own face-button correction, which would
+        # otherwise undo revision 4's binds.
         if [ "$INSTALLED_VERSION" -lt 2 ]; then
             cfg_ensure_key "$GLOBAL_INI" padhotkeys pause.alt guide || die "cannot migrate global config"
         fi
@@ -390,6 +392,9 @@ if DEFAULTS_VERSION="$(read_version "$DEFAULTS_VERSION_FILE")"; then
         if [ "$INSTALLED_VERSION" -lt 4 ]; then
             cfg_ensure_key "$GLOBAL_INI" pad x x || die "cannot migrate global config"
             cfg_ensure_key "$GLOBAL_INI" pad y y || die "cannot migrate global config"
+        fi
+        if [ "$INSTALLED_VERSION" -lt 5 ]; then
+            cfg_ensure_key "$GLOBAL_INI" pad face_fix off || die "cannot migrate global config"
         fi
         record_defaults_version "$DEFAULTS_VERSION" || die "cannot record the defaults version"
         log "defaults migration: $INSTALLED_VERSION -> $DEFAULTS_VERSION"
@@ -513,6 +518,12 @@ export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export SDL_JOYSTICK_DISABLE_UDEV=1
 unset DS_ROTATE
+# The Wayland dmabuf sink allocates four panel-sized buffers (five under GPU
+# present). DSperate prefers the CMA heap, but the MLP1's pool is 16 MB and
+# page cache usually fills it, so the allocation fails and the picture falls
+# back to the slower window surface. Weston on the MLP1 accepts buffers from
+# the non-contiguous heap, so name it and skip the CMA attempt.
+export DS_DMA_HEAP=system-uncached
 
 # The frozen controller roster that Jawaka publishes for the launch is kept.
 # Without one, SDL scans for itself; a direct-launch fallback is not invented.
@@ -534,11 +545,16 @@ FW="$(bios_file "$NDS_BIOS_DIR/nds_firmware.bin")"
 
 # --- launch ------------------------------------------------------------------
 # Battery saves go to a per-source, per-game file under Saves/DSperate; the
-# states and cache paths were set above. --no-disp and --no-fbdev keep the
-# direct-panel tiers out of the way; --no-mic disables real capture.
+# states and cache paths were set above. No video sink is named: with
+# SDL_VIDEODRIVER=wayland, DSperate's automatic choice skips the direct-panel
+# tiers and tries the Wayland dmabuf sink, then the window surface, then the
+# renderer. Naming dmabuf would drop the window-surface step, and on the MLP1
+# the renderer cannot take over a window the dmabuf attempt already used, so a
+# launch whose dmabuf allocation failed would exit. --no-mic disables real
+# capture.
 set -- --config "$GLOBAL_INI" --cache-root-only --single-rom \
        --save "$SAVES_DIR/$ROM_STEM.sav" \
-       --no-disp --no-fbdev --fullscreen --no-mic \
+       --fullscreen --no-mic \
        --managed-account-dir "$MANAGED_DIR"
 
 [ -n "$ARM9" ] && set -- "$@" --bios9 "$ARM9"

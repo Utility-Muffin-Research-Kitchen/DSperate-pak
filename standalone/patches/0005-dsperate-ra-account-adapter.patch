@@ -1,8 +1,8 @@
 diff --git a/src/cheevos/CMakeLists.txt b/src/cheevos/CMakeLists.txt
-index 9a799c1..c031100 100644
+index e04d614..4538845 100644
 --- a/src/cheevos/CMakeLists.txt
 +++ b/src/cheevos/CMakeLists.txt
-@@ -25,6 +25,8 @@ add_library(dsperate_cheevos STATIC
+@@ -20,6 +20,8 @@ add_library(dsperate_cheevos STATIC
    cheevos_memory.cpp
    cheevos_http.cpp
    cheevos_client.cpp
@@ -12,7 +12,7 @@ index 9a799c1..c031100 100644
    ${RC_API_SOURCES}
    ${RC_RUNTIME_SOURCES}
 diff --git a/src/cheevos/cheevos_client.cpp b/src/cheevos/cheevos_client.cpp
-index 2f68354..852fce4 100644
+index 54f5567..e8d65a6 100644
 --- a/src/cheevos/cheevos_client.cpp
 +++ b/src/cheevos/cheevos_client.cpp
 @@ -15,6 +15,7 @@
@@ -23,7 +23,7 @@ index 2f68354..852fce4 100644
  #include "rc_client.h"
  
  namespace ds::cheevos {
-@@ -270,6 +271,15 @@ void Client::post(Message::Kind kind, std::string text, std::string detail, u32
+@@ -242,6 +243,15 @@ void Client::post(Message::Kind kind, std::string text, std::string detail, u32
  }
  
  std::vector<Message> Client::take_messages() {
@@ -39,7 +39,7 @@ index 2f68354..852fce4 100644
    std::lock_guard<std::mutex> lk(mu_);
    std::vector<Message> out;
    out.swap(messages_);
-@@ -486,6 +496,8 @@ void load_done(int result, const char* error_message, rc_client_t* c, void* user
+@@ -435,6 +445,8 @@ void load_done(int result, const char* error_message, rc_client_t* c, void* user
  
  void Client::sign_in(const std::string& username, const std::string& password) {
    if (!client_) return;
@@ -48,7 +48,7 @@ index 2f68354..852fce4 100644
    state_ = State::SigningIn;
    rc_client_begin_login_with_password(static_cast<rc_client_t*>(client_), username.c_str(),
                                        password.c_str(), &login_done, nullptr);
-@@ -493,6 +505,8 @@ void Client::sign_in(const std::string& username, const std::string& password) {
+@@ -442,6 +454,8 @@ void Client::sign_in(const std::string& username, const std::string& password) {
  
  void Client::sign_in_with_token(const std::string& username, const std::string& token) {
    if (!client_) return;
@@ -57,7 +57,7 @@ index 2f68354..852fce4 100644
    state_ = State::SigningIn;
    rc_client_begin_login_with_token(static_cast<rc_client_t*>(client_), username.c_str(),
                                     token.c_str(), &login_done, nullptr);
-@@ -557,12 +571,31 @@ u32 Client::game_id() const {
+@@ -506,14 +520,33 @@ u32 Client::game_id() const {
  
  void Client::on_signed_in(const std::string& display_name) {
    state_ = State::SignedIn;
@@ -90,22 +90,24 @@ index 2f68354..852fce4 100644
 +  if (!ra_account::isManaged())
 +    post(Message::Kind::Problem, "RetroAchievements sign-in failed", why);
  }
+ 
+ void Client::on_game_loaded(const std::string& title, u32 id) {
 diff --git a/src/cheevos/cheevos_client.h b/src/cheevos/cheevos_client.h
-index 5248e80..adf8ff0 100644
+index 5b514f0..3a5d3e8 100644
 --- a/src/cheevos/cheevos_client.h
 +++ b/src/cheevos/cheevos_client.h
-@@ -51,6 +51,10 @@ struct Message {
-   std::string detail;   // may be empty
-   u32 points = 0;       // an unlock's value; 0 for everything else, and for
-                         // the 0-point achievements RetroAchievements has
+@@ -32,6 +32,10 @@ struct Message {
+   std::string text;
+   std::string detail;
+   u32 points = 0;   // unlock value; 0 for non-unlocks and 0-point achievements
 +  // UMRK: an account problem from the Leaf account bridge. Shown even when
 +  // ordinary achievement toasts are turned off, because the player has no
 +  // other way to learn their account needs attention.
 +  bool account = false;
  };
  
- // Where the session currently is. The frontend needs this to decide what to
-@@ -209,6 +213,13 @@ private:
+ enum class State : u8 {
+@@ -142,6 +146,13 @@ private:
    std::string hash_;                 // the identity of the dump in the slot
    std::string unavailable_;
  
@@ -387,7 +389,7 @@ index 0000000..31da0c8
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/cheevos/ra_account_bridge.cpp b/src/cheevos/ra_account_bridge.cpp
 new file mode 100644
-index 0000000..b3cd557
+index 0000000..9e798f7
 --- /dev/null
 +++ b/src/cheevos/ra_account_bridge.cpp
 @@ -0,0 +1,494 @@
@@ -887,7 +889,7 @@ index 0000000..b3cd557
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/cheevos/ra_account_contract.cpp b/src/cheevos/ra_account_contract.cpp
 new file mode 100644
-index 0000000..b26763a
+index 0000000..1f954fc
 --- /dev/null
 +++ b/src/cheevos/ra_account_contract.cpp
 @@ -0,0 +1,557 @@
@@ -1449,10 +1451,10 @@ index 0000000..b26763a
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 4bd7ed8..b79dbd8 100644
+index de5692c..da0f762 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -26,6 +26,7 @@
+@@ -29,6 +29,7 @@
  #include "cheevos/cheevos_client.h"
  #include "cheevos/cheevos_hash.h"
  #include "cheevos/cheevos_http.h"
@@ -1460,7 +1462,7 @@ index 4bd7ed8..b79dbd8 100644
  #endif
  #if DSPERATE_NET
  #include "net/lan_mp.h"
-@@ -1173,6 +1174,12 @@ bool g_restart = false;
+@@ -1038,6 +1039,12 @@ bool g_restart = false;
  }
  
  static int run(int argc, char** argv) {
@@ -1473,9 +1475,9 @@ index 4bd7ed8..b79dbd8 100644
    const char* rom = nullptr;
    const char* config_arg = nullptr;
    long frame_limit = 0;
-@@ -1281,6 +1288,10 @@ static int run(int argc, char** argv) {
-     // The account that token belongs to, for a launcher that would rather pass
-     // both than keep a name in the config.
+@@ -1129,6 +1136,10 @@ static int run(int argc, char** argv) {
+     // Implies enabled, but a later --no-cheevos still wins (applied in order).
+     else if (arg("--cheevos-token")) { cli.set("cheevos.token_file", argv[++i]); cli.set("cheevos.enabled", "true"); }
      else if (arg("--cheevos-user")) cli.set("cheevos.username", argv[++i]);
 +    // UMRK: the non-secret managed account directory Leaf's wrapper resolved
 +    // for an authorized DSperate launch (standalone-ra-account-v1). The account
@@ -1484,18 +1486,18 @@ index 4bd7ed8..b79dbd8 100644
  #endif
      else if (flag("--autoload")) cli.set("emu.autoload", "true");
      else if (flag("--no-autoload")) cli.set("emu.autoload", "false");
-@@ -1382,7 +1393,7 @@ static int run(int argc, char** argv) {
+@@ -1203,7 +1214,7 @@ static int run(int argc, char** argv) {
    }
    auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
-                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.disp", "video.fbdev", "video.vsync", "audio.enabled", "audio.volume",
--                                              "audio.mic", "emu.jit", "emu.quantum", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.timing_oc", "emu.gx_worker", "emu.cpu_tuning", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
-+                                              "audio.mic", "emu.jit", "emu.quantum", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.timing_oc", "emu.gx_worker", "emu.cpu_tuning", "emu.fast_load", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username", "cheevos.managed_dir"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
+                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.sink", "video.disp", "video.fbdev", "video.gpu_present", "video.vsync", "audio.enabled", "audio.volume",
+-                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
++                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username", "cheevos.managed_dir"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
    apply_cli();
    if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
    const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
-@@ -3158,7 +3169,18 @@ sdl_ready:
-   // unless asked for, and every failure here is reported once and then ignored:
-   // a device with no libcurl, no network, or no account still plays games.
+@@ -2637,7 +2648,18 @@ sdl_ready:
+   // RetroAchievements, Casual mode. Off unless asked for; every failure is
+   // reported once and then ignored.
    ds::cheevos::Client cheevos;
 -  const bool cheevos_on = cfg.flag("cheevos.enabled", false);
 +  // UMRK: consume the Leaf account snapshot before anything can start the
@@ -1511,19 +1513,19 @@ index 4bd7ed8..b79dbd8 100644
 +  ds::cheevos::ra_account::import(cheevos_setting && !cheevos_setting_on);
 +  const bool cheevos_on = ds::cheevos::ra_account::achievementsOn(cheevos_setting, cheevos_setting_on);
  #endif
- // Networking is not a part of the achievements feature, and used to be nested
- // inside its guard: DSPERATE_CHEEVOS=OFF with DSPERATE_NET=ON would not
-@@ -3431,7 +3453,8 @@ sdl_ready:
-       // of what earned it.
+ #if DSPERATE_NET
+   std::unique_ptr<ds::net::LanMp> lan;
+@@ -2831,7 +2853,8 @@ sdl_ready:
+       // toast, which is drawn onto the canvas afterwards.
        if (m.kind == ds::cheevos::Message::Kind::Unlock && cfg.flag("cheevos.auto_screenshot", false))
          shot_pending = true;
 -      if (!cfg.flag("cheevos.toasts", true)) continue;
 +      // UMRK: a Leaf account problem is shown even with toasts off.
 +      if (!cfg.flag("cheevos.toasts", true) && !m.account) continue;
-       // cfg, not the menu host: both read the same key, and the host writes
-       // through cfg, so a switch flipped in the menu is live on the next
-       // message without any wiring between them.
-@@ -3459,26 +3482,44 @@ sdl_ready:
+       Toast t;
+       t.header = m.kind == ds::cheevos::Message::Kind::Unlock ? "ACHIEVEMENT UNLOCKED"
+                : m.kind == ds::cheevos::Message::Kind::Problem ? "RETROACHIEVEMENTS" : nullptr;
+@@ -2854,20 +2877,38 @@ sdl_ready:
      }
      std::string status() const override {
        if (!c) return "NOT AVAILABLE IN THIS BUILD";
@@ -1543,17 +1545,11 @@ index 4bd7ed8..b79dbd8 100644
 +      case ds::cheevos::State::SignedIn:    base = "SIGNED IN AS " + c->username(); break;
 +      case ds::cheevos::State::LoadingGame: base = "LOADING ACHIEVEMENTS..."; break;
 +      case ds::cheevos::State::Playing:     base = "SIGNED IN AS " + c->username(); break;
-       // The dump is recognised; the game simply has no set yet. Said plainly
-       // so nobody goes looking for a list that does not exist.
        case ds::cheevos::State::EmptySet:
 -        return "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
 +        base = "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
 +        break;
        case ds::cheevos::State::NoSet:
-         // The hash is the actionable part: RetroAchievements identifies a dump,
-         // so a ROM from your own cart often is not one it knows even when the
-         // game has a set. With the hash the player can ask for theirs to be
-         // added; without it this line is a dead end.
 -        return "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
 +        base = "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
 +        break;
@@ -1577,9 +1573,9 @@ index 4bd7ed8..b79dbd8 100644
      }
      std::string progress() const override {
        if (!c || sum.total == 0) return {};
-@@ -3628,6 +3669,27 @@ sdl_ready:
-       // nothing else to try here; a token the server has expired comes back as
-       // a failure and the player signs in again from the menu (phase 4).
+@@ -2999,6 +3040,27 @@ sdl_ready:
+       // A password is never kept; an expired token fails and the player
+       // signs in again from the menu.
        ds::cheevos::Credentials creds;
 +      // UMRK: a managed Leaf launch uses the bridge's transition. Import the
 +      // account with the native password login exactly once, reuse the stored
@@ -1602,22 +1598,22 @@ index 4bd7ed8..b79dbd8 100644
 +        std::fprintf(stderr, "cheevos: managed account suppressed (%s)\n",
 +                     ds::cheevos::ra_account::statusLine().c_str());
 +      } else {
-       // A token file named on the command line comes first: it is this run's
-       // explicit instruction, and the point of it is to override whatever is
-       // stored. Nothing is written back -- the file is not ours, and the run
-@@ -3666,6 +3728,7 @@ sdl_ready:
+       // A token file named on the command line overrides whatever is
+       // stored; nothing is written back, the file isn't ours.
+       const std::string token_file = cfg.str("cheevos.token_file");
+@@ -3028,6 +3090,7 @@ sdl_ready:
        }
        if (!creds.empty()) cheevos.sign_in_with_token(creds.username, creds.token);
        else std::fprintf(stderr, "cheevos: not signed in\n");
 +      }
  
-       // The game's identity, computed now and used when the sign-in lands.
-       // Hashing the cart's own source is safe *because* read_unpatched reads
+       // Safe to hash the cart's source here: read_unpatched reads past the
+       // secure-area rewrite Cart has already done by this point.
 diff --git a/src/frontend/sdl/menu.cpp b/src/frontend/sdl/menu.cpp
-index 60a3b44..6c27a64 100644
+index 3d872ff..95226ce 100644
 --- a/src/frontend/sdl/menu.cpp
 +++ b/src/frontend/sdl/menu.cpp
-@@ -936,7 +936,10 @@ int account_rows(const CheevosHost* h, AccountRow out[kAccountRows]) {
+@@ -845,7 +845,10 @@ int account_rows(const CheevosHost* h, AccountRow out[kAccountRows]) {
    int n = 0;
    if (!h) return 0;
    if (h->signed_in()) out[n++] = AccountRow::SignOut;
@@ -1630,10 +1626,10 @@ index 60a3b44..6c27a64 100644
    out[n++] = AccountRow::Toasts;
    out[n++] = AccountRow::Screenshot;
 diff --git a/src/frontend/sdl/menu.h b/src/frontend/sdl/menu.h
-index a0804a6..c1d5544 100644
+index 756f8f4..c185e02 100644
 --- a/src/frontend/sdl/menu.h
 +++ b/src/frontend/sdl/menu.h
-@@ -95,6 +95,11 @@ struct CheevosHost {
+@@ -77,6 +77,11 @@ struct CheevosHost {
    virtual bool signed_in() const = 0;
    virtual bool has_set() const = 0;
  

@@ -52,7 +52,7 @@ for v in UMRK_RA_ACCOUNT_VERSION UMRK_RA_ACCOUNT_STATE UMRK_RA_ACCOUNT_USERNAME 
     eval "set_=\${$v+1} val_=\${$v-}"
     if [ -n "$set_" ]; then printf '%s=[%s]\n' "$v" "$val_" >>"$DS_FAKE_OUT.env"; fi
 done
-printf '%s\n' "$SDL_VIDEODRIVER" "${DS_ROTATE-unset}" >"$DS_FAKE_OUT.video"
+printf '%s\n' "$SDL_VIDEODRIVER" "${DS_ROTATE-unset}" "heap=${DS_DMA_HEAP-unset}" >"$DS_FAKE_OUT.video"
 FAKE
 cat >"$PAK/bin/dsperate-notice" <<'FAKE'
 #!/bin/sh
@@ -87,8 +87,9 @@ run_wrapper() {
 run_wrapper "$ROM"
 check_contains "$OUT" "--config" "passes --config"
 check_contains "$OUT" "--save" "passes --save"
-check_contains "$OUT" "--no-disp" "passes --no-disp"
-check_contains "$OUT" "--no-fbdev" "passes --no-fbdev"
+# The sink is left to DSperate: an explicit one drops the window-surface
+# fallback, and the deprecated per-tier switches only add log noise.
+if grep -q -e '^--sink$' -e '^--no-disp$' -e '^--no-fbdev$' "$OUT"; then fail "names a video sink"; else pass; fi
 check_contains "$OUT" "--fullscreen" "passes --fullscreen"
 check_contains "$OUT" "--no-mic" "passes --no-mic"
 if [ "$(tail -n 1 "$OUT")" = "$ROM" ]; then pass; else fail "content path is the last argument"; fi
@@ -147,9 +148,10 @@ run_wrapper "$ROM"
 check_contains "$GAME_INI" "stick_deadzone = 0" "explicit calibrated setting preserved"
 check_contains "$SD/.userdata/mlp1/dsperate/dsperate.ini" "stick_deadzone = 12000" "global raw default preserved"
 
-( SDL_VIDEODRIVER=kmsdrm DS_ROTATE=90 run_wrapper "$ROM" )
+( SDL_VIDEODRIVER=kmsdrm DS_ROTATE=90 DS_DMA_HEAP=cma-uncached run_wrapper "$ROM" )
 check_contains "$OUT.video" "wayland" "forces Weston backend"
 check_contains "$OUT.video" "unset" "clears rotation"
+check_contains "$OUT.video" "heap=system-uncached" "pins the non-contiguous dmabuf heap"
 
 # --- optional BIOS -----------------------------------------------------------
 : >"$SD/BIOS/NDS/nds_bios_arm9.bin"
@@ -233,6 +235,7 @@ check_contains "$GLOBAL_INI" "stylus_button.alt = +lefttrigger" "missing stylus_
 check_contains "$GLOBAL_INI" "pause.alt = guide" "missing pause.alt added"
 check_contains "$GLOBAL_INI" "x = x" "missing pad.x bind added"
 check_contains "$GLOBAL_INI" "y = y" "missing pad.y bind added"
+check_contains "$GLOBAL_INI" "face_fix = off" "missing pad.face_fix added"
 check_contains "$GLOBAL_INI" "a = y" "custom pad binding preserved"
 check_contains "$GLOBAL_INI" "layout = vertical" "custom layout preserved"
 [ "$(cat "$STAMP" | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
@@ -272,6 +275,28 @@ printf 'bogus\n' >"$STAMP"
 run_wrapper "$ROM"
 [ "$(cat "$STAMP" | tr -d '[:space:]')" = "$SHIPPED_VERSION" ] \
     && pass || fail "invalid installed stamp was not repaired"
+
+# A revision-4 install gains only the revision-5 key, and a player who turned
+# the correction back on keeps it.
+cat >"$GLOBAL_INI" <<'INI'
+[pad]
+x = x
+y = y
+INI
+printf '4\n' >"$STAMP"
+run_wrapper "$ROM"
+check_contains "$GLOBAL_INI" "face_fix = off" "revision 4 gains pad.face_fix"
+[ "$(grep -c '^stick_dpad' "$GLOBAL_INI")" = "0" ] \
+    && pass || fail "revision 4 re-ran an earlier revision's step"
+cat >"$GLOBAL_INI" <<'INI'
+[pad]
+x = y
+y = x
+face_fix = auto
+INI
+printf '4\n' >"$STAMP"
+run_wrapper "$ROM"
+check_contains "$GLOBAL_INI" "face_fix = auto" "custom pad.face_fix preserved"
 
 # --- archive policy and visible errors ---------------------------------------
 # A launch that cannot proceed shows the notice instead of exiting silently.

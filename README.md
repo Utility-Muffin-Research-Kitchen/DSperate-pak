@@ -22,20 +22,63 @@ clean clone with no sibling checkout.
 ## Status
 
 [DSperate 2.1.1](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.1.1)
-is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. It updates the
-source pin to **DSperate v2.1.1** with five reviewed pak patches, the fifth
-being the Leaf RetroAchievements account adapter: on Leaf 0.12.0-beta.6 or
-newer, DSperate signs in with the account saved in **Settings > Games >
-Accounts**, and an older Leaf leaves DSperate's own sign-in as it was.
+is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. On Leaf
+0.12.0-beta.6 or newer, DSperate signs in with the account saved in
+**Settings > Games > Accounts**, and an older Leaf leaves DSperate's own
+sign-in as it was.
 
-Two clean builds and a rebuild from the corresponding-source archive reproduce
-the profile-guided binary `87de031c...`, and the pak ZIP and source archive are
-byte-for-byte reproducible. The build runs with `DSPERATE_PGO_STRICT` and fails
-if a trained object loses its profile or a function no longer matches it.
-`--version` reports `v2.1.1 (baec965)`. The account adapter replays the shared
-`standalone-ra-account-v1` fixtures and its fault tests on every check.
+The next candidate updates the source pin to **DSperate v3.0.3** with five
+reviewed pak patches, rebased onto upstream's 3.0 rewrite without changing
+what they do, and its runtime manifest says `pak_version` `3.0.3`. It is not
+published yet. Two clean builds reproduce the profile-guided binary
+`62a5f6c7...`, trained on all eight of upstream's v3.0.3
+scenes, and `--version` reports `v3.0.3 (f5fa35e)`.
 
-This exact build passed MLP1 device qualification from 2026-09-24 to
+This exact build passed MLP1 device qualification on 2026-10-10. It updated
+over 2.1.1 through Pak Rat with every battery save, save state and setting
+unchanged, and the defaults update added `face_fix = off` beside your X and Y
+binds. Every button matched its printed label, the stick and R2 drove the
+stylus, and Menu opened the pause menu. A 2.x save state was refused with a
+message while the game kept running; new states saved and loaded, and fast
+forward and the layout switch worked. The picture came back after a suspend
+while playing and while paused. RetroAchievements signed in with the account
+saved in Leaf, and the account page said `MANAGED BY LEAF`. Uninstalling and
+reinstalling through Pak Rat kept all 27 DSperate data files byte for byte and
+kept DSperate as the game's emulator. The speed comparison with 2.1.1 is
+below.
+
+What 3.0.3 changes for you:
+
+- **Save states from DSperate 2.x don't load.** Upstream changed the state
+  format, and 3.0.3 shows a message instead of loading an older state. Battery
+  saves carry over unchanged, so progress you saved in the game is kept. Your
+  old state files stay on the card.
+- **Heavy games run at full speed.** DSperate 3 is faster, and it scales the
+  picture on the GPU with Vulkan, on the MLP1's own driver. See the table below.
+- DSperate 3 uses a faster CPU timing model by default. If a game hangs or
+  goes out of sync, set `timing = exact` under `[emu]` in that game's INI.
+- 3D can also be drawn on the GPU. It's off by default, because the CPU
+  drawing is the exact one. To try it in a heavy 3D game, set `gpu3d = true`
+  under `[video]` in that game's INI.
+- The controls stay the same. The MLP1 profile turns off DSperate 3's own
+  face-button correction (`[pad] face_fix = off`), which would otherwise swap
+  X and Y on this pad.
+
+Measured on an MLP1 through real Leaf launches, at the normal 60 fps cap, over
+frames 900 to 2400 of each game's boot with no input (frames 1200 to 3000 for
+New Super Mario Bros.), two passes each:
+
+| Game | 2.1.1 speed | 2.1.1 frames over 16.7 ms | 3.0.3 speed | 3.0.3 frames over 16.7 ms |
+| --- | --- | --- | --- | --- |
+| New Super Mario Bros. | 94.5% | 57% | 100% | 1 of 3,600 |
+| Golden Sun: Dark Dawn | 95.5% | 39% | 100% | 0.2% |
+| The Legend of Zelda: Spirit Tracks | 92.7% | 50% | 100% | 0.5% |
+| Mario Kart DS | 96.2% | 36% | 99.8% | 0.7% to 1.1%, and 7% in one of four passes |
+
+Audio underruns over each run fell from 230 to 515 on 2.1.1 to 19 or fewer.
+Without the Vulkan presenter, 3.0.3 runs Golden Sun: Dark Dawn at only 91.8%.
+
+DSperate 2.1.1 passed MLP1 device qualification from 2026-09-24 to
 2026-09-26: native sign-in and achievement set loading, a fresh account import
 and reuse across both SD cards, a rejected-token retry, account write faults
 with the required on-screen error, per-game disable, a retained sign-out, a
@@ -54,7 +97,7 @@ and uninstall checks, both core pickers, selection persistence across a device
 reboot, the `.7z` warning and stick-driven stylus/tap checks. Uninstall preserved
 all 35 tested settings, save and state files byte for byte.
 The target is Leaf 0.12.0 with W3/W4 input and Menu support. The pak version
-tracks the upstream emulator, so it is now `2.0.0`.
+tracks the upstream emulator.
 See the [implementation plan](https://github.com/Utility-Muffin-Research-Kitchen/umrk-workspace/blob/main/plans/dsperate-standalone-content-pak.md).
 
 ## Build
@@ -63,6 +106,7 @@ You need Docker, make, git and python3. Everything else is pinned.
 
 ```sh
 make standalone     # build the pinned DSperate binary (long; cached)
+make pgo-train      # retrain the PGO profile after a source bump (DS_ROMS=... DS_BIOS=...)
 make test-wrapper   # check the launch wrapper without building
 make validate       # check pak.json against the content-pak contract
 make check          # validate, run the host tests, package, validate the package
@@ -88,8 +132,10 @@ every step, a full card, damaged files and a missing account directory.
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
-This candidate builds with a profile retrained for v2.1.1 with the pak's own
-GCC 12.3.0 toolchain; see `standalone/PROVENANCE.md`.
+This candidate builds with a profile trained for v3.0.3 with the pak's own
+GCC 12.3.0 toolchain. `make pgo-train` retrains it in the same pinned image
+from the scene ROMs and the real DS BIOS and firmware, which you supply and
+which never enter the repository; see `standalone/PROVENANCE.md`.
 
 Both archives are written inside the same pinned image with sorted entries,
 `SOURCE_DATE_EPOCH` timestamps, owner 0 and fixed modes, so anyone rebuilding
@@ -187,6 +233,15 @@ or choose another emulator.
 If a ROM cannot be opened, or a required file cannot be created, DSperate shows
 a fullscreen message and returns to Leaf instead of exiting silently. The same
 message names the reason, which is also written to `dsperate.log`.
+
+### Updating from DSperate 2.x
+
+DSperate 3.0.3 can't load save states made by 2.x, because upstream changed
+the state format. Before you update, save in the game the normal way in
+anything you play from a state. Battery saves, settings and your
+RetroAchievements account carry over, and the old state files stay where they
+are. Pak Rat doesn't install an older version over a newer one, so there is no
+way back to 2.x from the store.
 
 ### Updating from the v1.15.1 test build
 
