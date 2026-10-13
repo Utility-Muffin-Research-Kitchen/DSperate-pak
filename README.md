@@ -21,18 +21,17 @@ clean clone with no sibling checkout.
 
 ## Status
 
-[DSperate 2.1.1](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v2.1.1)
-is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. On Leaf
-0.12.0-beta.6 or newer, DSperate signs in with the account saved in
-**Settings > Games > Accounts**, and an older Leaf leaves DSperate's own
-sign-in as it was.
+[DSperate 3.0.3](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v3.0.3)
+is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. It updates the
+source pin to **DSperate v3.0.3** with five reviewed pak patches, rebased onto
+upstream's 3.0 rewrite without changing what they do. On Leaf 0.12.0-beta.6 or
+newer, DSperate signs in with the account saved in **Settings > Games >
+Accounts**, and an older Leaf leaves DSperate's own sign-in as it was.
 
-The next candidate updates the source pin to **DSperate v3.0.3** with five
-reviewed pak patches, rebased onto upstream's 3.0 rewrite without changing
-what they do, and its runtime manifest says `pak_version` `3.0.3`. It is not
-published yet. Two clean builds reproduce the profile-guided binary
-`62a5f6c7...`, trained on all eight of upstream's v3.0.3
-scenes, and `--version` reports `v3.0.3 (f5fa35e)`.
+Two clean builds and a rebuild from the corresponding-source archive reproduce
+the profile-guided binary `62a5f6c7...`, trained on all eight of upstream's
+v3.0.3 scenes, and the pak ZIP is byte-for-byte reproducible. `--version`
+reports `v3.0.3 (f5fa35e)`.
 
 This exact build passed MLP1 device qualification on 2026-10-10. It updated
 over 2.1.1 through Pak Rat with every battery save, save state and setting
