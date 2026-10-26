@@ -49,14 +49,14 @@
   },
   "pgo": {
     "dir": "standalone/pgo/aarch64",
-    "sha256": "cffe0f962baf044aabeb49fbf3d281ff00885a6141324edb95e71f5582da6b2c",
+    "sha256": "0c9040594882060e1f6ff64817bcbdd3ce22db738a559ffdb46319897f3fbdcc",
     "files": 104,
     "fingerprint": "2d22e81dd634b4f0237a38ab089fbe6ee63d0368",
     "compiler": "12.3.0 (aarch64-buildroot-linux-gnu)",
-    "source_commit": "f5fa35ea19f966543feae086798701f134d89619",
-    "date": "2026-10-10T19:28Z",
+    "source_commit": "ddf2910e6d80220c6b22b4df61f0786ac9879cda",
+    "date": "2026-10-26T21:13Z",
     "scenes": "mlbis sm64 etody dbori meteos gsdd st nsmb",
-    "note": "Trained by standalone/pgo-train.sh with this pak's toolchain and the lock's own flags against the patched v3.0.3 tree with the Vulkan presenter built, so the fingerprint matches the release build. The scenes are upstream v3.0.3's list: five recorded replays and three boots from frame 0, all eight of which ran (st, skipped for 2.1.1 because its old save-state scene was for another ROM revision, is a boot scene now). The headless frontend is the training build; the SDL frontend and the windowless video library only it links, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
+    "note": "Trained by standalone/pgo-train.sh with this pak's toolchain and the lock's own flags against the patched v3.0.5 tree with the Vulkan presenter built, so the fingerprint matches the release build. The scenes are upstream v3.0.5's list, unchanged from v3.0.3: five recorded replays and three boots from frame 0, all eight of which ran. Upstream's two DSi scenes need DSi dumps and are not trained, as for 3.0.3. The headless frontend is the training build; the SDL frontend and the windowless video library only it links, rcheevos and the reference kernels are never trained. Verify with -DDSPERATE_PGO_STRICT=ON: 0 unexpected objects without a profile and 0 coverage mismatches."
   },
   "version": {
     "tag": "v3.0.5",
@@ -103,8 +103,8 @@
   },
   "artifact": {
     "file_name": "dsperate",
-    "sha256": "PENDING-FIRST-VERIFIED-BUILD",
-    "size_bytes": 0,
+    "sha256": "86bf025da6ed951b7e8b29326f62bb0f341c7e2700fb060444f3305d5d459a1d",
+    "size_bytes": 4693784,
     "note": "Recorded after two clean FORCE=1 PGO builds agree on the v3.0.5 candidate. CI is the independent second-machine verifier; investigate any mismatch rather than overwriting this value."
   },
   "notice": {
