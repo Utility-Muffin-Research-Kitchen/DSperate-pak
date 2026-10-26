@@ -8,8 +8,8 @@ Everything here is measured from the build, not from memory.
 | | |
 | --- | --- |
 | Upstream | `https://github.com/beebono/DSperate.git` |
-| Tag | `v3.0.3` |
-| Commit | `f5fa35ea19f966543feae086798701f134d89619` |
+| Tag | `v3.0.5` |
+| Commit | `ddf2910e6d80220c6b22b4df61f0786ac9879cda` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
 | Vulkan headers | `https://github.com/KhronosGroup/Vulkan-Headers.git` `v1.4.321` (`2cd90f9d20df57eac214c148f3aed885372ddcfe`), build-time only, Apache-2.0 OR MIT |
 | Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch` and `patches/0005-dsperate-ra-account-adapter.patch` (sha256-locked; see below) |
@@ -19,19 +19,21 @@ Everything here is measured from the build, not from memory.
 The five patches are locked by sha256 in `upstream.lock.json`; the build
 applies them in order and refuses a patch whose hash differs.
 
-Reviewed against [upstream v3.0.3](https://github.com/beebono/DSperate/releases/tag/v3.0.3)
-on 2026-10-10. Between v2.1.1 and v3.0.3 upstream rewrote comments across the
-whole tree (`46eb3b5`, `95c4a1f`) and moved code in the SDL frontend, so four
-of the five patches no longer applied. Each was re-anchored by hand; none of
-them changed what it does, and none became redundant:
+Reviewed against [upstream v3.0.5](https://github.com/beebono/DSperate/releases/tag/v3.0.5)
+on 2026-10-26, by rebasing the five patches from v3.0.3 onto v3.0.5 as commits.
+0002, 0004 and 0005 merged without conflicts; 0001 and 0003 needed a hand
+resolution. None changed what it does, and none became redundant:
 
 | Patch | Decision |
 | --- | --- |
-| 0001 archive/cache policy | Keep and rebase. `find_rom`, `choose_cache` and the frontend's CLI parser, `apply_cli` key list and cache setup moved or were reworded; the logic is unchanged and the cache-root, single-entry and unsafe-path policies are still absent upstream. `--inspect-cart` runs before v3's ROM preload setting is applied, so it still maps the file without reading it whole. |
-| 0002 save durability | Keep and rebase. v3.0.3 still writes battery saves and states with an unchecked `fclose`, and the firmware override without a checked flush and close. |
-| 0003 lid/resume | Keep and rebase. Only the comment above the pulse changed; v3.0.3 still fabricates a close on a device with no switch. |
+| 0001 archive/cache policy | Keep and rebase. Only the frontend's include list conflicted (upstream added `<optional>`). v3.0.5's new `--saves`/`--states` flags and start-failure screen do not overlap the cache-root, single-entry and unsafe-path policies, which are still absent upstream. A refused archive sets the loader's error like any other failure, so v3.0.5's start-failure screen reports it; the wrapper refuses such archives with its own notice before launch in any case. |
+| 0002 save durability | Keep and rebase. v3.0.5 still writes battery saves and states with an unchecked `fclose`, and the firmware override without a checked flush and close. |
+| 0003 lid/resume | Keep and rebase. v3.0.4 rewrote `Lid::poll` so the guest sees every close for at least 60 emulated frames. The switchless resume pulse is now one frame, held for those 60, and it still fires on every resume of a device with no switch. The rebased patch keeps upstream's one-frame pulse and the hold, and adds the same `closed_` condition. |
 | 0004 deterministic `--version` | Keep. Applies unchanged; `cmake/version.cmake` did not move. |
-| 0005 Leaf account adapter | Keep and rebase. The achievement client changed only in comments; the frontend hooks were re-anchored. The adapter's own three files apply unchanged. |
+| 0005 Leaf account adapter | Keep and rebase. The frontend hooks moved with v3.0.5's new start-up code and merged cleanly; the adapter's own three files apply unchanged. |
+
+The v3.0.3 review (2026-10-10) re-anchored four of the five patches by hand
+after upstream rewrote comments across the whole tree (`46eb3b5`, `95c4a1f`).
 
 `standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
 archive policy.
@@ -110,7 +112,10 @@ it did not see, which on these devices is every resume. A game that blanks its
 screens on lid-close and restores them only on an open it saw coming (Contra 4)
 then stays black; emulation, audio and input all keep running. The pulse now
 fires only for a lid already believed closed, so with no switch nothing happens
-and the screens survive a resume.
+and the screens survive a resume. Since v3.0.4 upstream also resyncs the DS
+clock from the host clock when the lid opens. With no close there is no open
+either, so on the MLP1 the DS clock still runs behind by the length of a
+suspend, as it did in 3.0.3.
 
 `standalone/patches/0002-save-durability.patch` makes battery-save and
 save-state writes durable. Upstream writes to `<file>.tmp`, closes it without
@@ -130,10 +135,12 @@ the count, so it did not actually undo partial reads even in the old patch.
 The checked-write helper covers DS battery saves and save-state files, not
 upstream's new DSi NAND/SD persistence or mismatch-backup writes.
 
-Upstream v3.0.3 writes state format 4 and reads only format 4
-(`src/core/state/state.h`: `FORMAT_VERSION` 4, `OLDEST_READABLE_VERSION` 4).
-States written by DSperate 2.x are format 3, and 3.0.3 refuses them with a
-message instead of loading them. Battery saves are unaffected: the save-chip
+Upstream v3.0.5 writes state format 4 and reads only format 4
+(`src/core/state/state.h`: `FORMAT_VERSION` 4, `OLDEST_READABLE_VERSION` 4),
+as v3.0.3 did; `src/core/state/` is unchanged between the two. v3.0.5 gives
+the GPU raster's vertices a sub-pixel position, but does not save it: a loaded
+frame's vertices draw on whole pixels. States written by DSperate 2.x are
+format 3, and 3.x refuses them with a message instead of loading them. Battery saves are unaffected: the save-chip
 handling, the `.bak` logic and the firmware override format are unchanged, and
 so are the state file names, so old states stay on the card untouched.
 
@@ -158,21 +165,23 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
 | `DSPERATE_VULKAN` | `ON` | build the Vulkan presenter and the optional GPU 3D raster (see below) |
 | `DSPERATE_VULKAN_INCLUDE` | `/vulkan-include` | the pinned Khronos headers; the image has none, and the build fails if the presenter is not enabled |
-| `DSPERATE_CHEEVOS_VERSION` | `3.0.3` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
+| `DSPERATE_CHEEVOS_VERSION` | `3.0.5` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 | `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
 | `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
 | `DSPERATE_PGO_STRICT` | `ON` | keeps GCC's missing-profile and coverage-mismatch warnings; the build counts them and fails (see below) |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
-(`1791414282`). `DSPERATE_LOCK_VERSION=v3.0.3` and
-`DSPERATE_LOCK_COMMIT=f5fa35e` are exported from the lock so `--version` is
+(`1792600541`). `DSPERATE_LOCK_VERSION=v3.0.5` and
+`DSPERATE_LOCK_COMMIT=ddf2910` are exported from the lock so `--version` is
 deterministic.
 
 ### Presenters
 
 v3 adds two ways to scale and compose the picture off the CPU into the scanout
-buffer (`video.gpu_present`, on by default): the Rockchip RGA through V4L2
-mem2mem, and a Vulkan compute pass.
+buffer (`video.gpu_present`, on by default): Vulkan, and the Rockchip RGA
+through V4L2 mem2mem. Since v3.0.5 Vulkan is tried first, and it draws with a
+render pass on the scanout buffer (vertex and fragment shaders, shipped
+precompiled in the source tree) instead of v3.0.3's compute pass.
 
 - The RGA presenter is compiled (the sysroot's `linux/videodev2.h` has
   multi-planar mem2mem), but it declines on the MLP1: the stock kernel exposes
@@ -188,10 +197,14 @@ mem2mem, and a Vulkan compute pass.
   `video: GPU present on Mali-G52 ... (dma-buf import, dmabuf scanout)`.
 - GPU 3D (`video.gpu3d`) stays off, upstream's default; the CPU raster remains
   the exact reference. A player can turn it on per game.
+- The DSperate TATE core sets `DS_ROTATE=270`. The Vulkan presenter turns the
+  picture in the same pass, and so does the CPU scanline path it falls back to.
+  The RGA presenter declines a turned picture.
 
-The presenter decides one game in the qualification set. Measured on the MLP1
-at the normal 60 fps cap through real Leaf launches (frames 900 to 2400 of a
-boot with no input, two passes): Golden Sun: Dark Dawn holds 100% speed with
+The presenter decides one game in the qualification set. Measured with 3.0.3's
+compute-pass presenter on the MLP1 at the normal 60 fps cap through real Leaf
+launches (frames 900 to 2400 of a boot with no input, two passes): Golden Sun:
+Dark Dawn holds 100% speed with
 5 of 3,000 frames over the 16.7 ms budget, against 91.8% speed and 958 frames
 over with the presenter off. New Super Mario Bros., Spirit Tracks and Mario
 Kart DS hold full speed either way. Leaf's g29p1 Mali driver, which PPSSPP
@@ -211,16 +224,19 @@ it, so in real Leaf launches the allocation failed
 (`/dev/dma_heap/cma-uncached: alloc: Cannot allocate memory`) and the picture
 fell back to the window surface, which cost about 2 ms per frame to present.
 Weston accepts buffers from the non-contiguous heap, and with it the present
-step takes about 0.1 ms.
+step takes about 0.1 ms. Since v3.0.5 a pinned heap that runs out of memory
+falls back to the next heap that imports, so the pin no longer turns an
+exhausted heap into a failed allocation; it still skips the CMA attempt.
 
 ## Profile-guided optimisation
 
 The build consumes a PGO profile trained with **this same toolchain** (Buildroot
-GCC 12.3.0) and these same flags, against the patched v3.0.3 source. Upstream
+GCC 12.3.0) and these same flags, against the patched v3.0.5 source. Upstream
 ships profiles for other GCC versions only; CMake's fingerprint check refuses
 those, and a `.gcda` is bound to the compiler that wrote it, so they cannot be
 used here. A profile is also bound to its source: every upstream bump needs a
-new one, and v3.0.3's CMake changed the fingerprint string itself.
+new one. The fingerprint itself is unchanged from 3.0.3, because the compiler
+and flags are.
 
 `make pgo-train` (`standalone/pgo-train.sh`) produces it:
 
@@ -231,11 +247,12 @@ new one, and v3.0.3's CMake changed the fingerprint string itself.
   `-DDSPERATE_HEADLESS=ON`), so its `pgo-fingerprint` is the release build's
   (`2d22e81dd634b4f0237a38ab089fbe6ee63d0368` for this revision). The image is
   aarch64, so the binary runs natively on an arm64 Docker host;
-- it runs upstream's v3.0.3 scene list with the real BIOS and firmware: five
-  recorded replays (`mlbis sm64 etody dbori meteos`) and three boots from frame
-  0 (`gsdd st nsmb`), and records in the MANIFEST only the scenes that ran.
-  All eight ran for this profile (MANIFEST date 2026-10-10T19:28Z), with the
-  Europe and USA dumps of the RetroAchievements set;
+- it runs upstream's v3.0.5 scene list (unchanged from v3.0.3) with the real
+  BIOS and firmware: five recorded replays (`mlbis sm64 etody dbori meteos`)
+  and three boots from frame 0 (`gsdd st nsmb`), and records in the MANIFEST
+  only the scenes that ran. All eight ran for this profile (MANIFEST date
+  2026-10-26T21:13Z), with the same ROMs and BIOS as the 3.0.3 profile.
+  Upstream's two DSi scenes need DSi dumps and are not trained;
 - the `.gcda` files, the `MANIFEST`, and a sha256 over the whole directory are
   written to `standalone/pgo/aarch64` and the lock. The build refuses a profile
   whose directory hash does not match the lock, and CMake refuses one whose
@@ -268,7 +285,7 @@ Entries are sorted, every timestamp is `SOURCE_DATE_EPOCH`, owner and group are
 gzip header has no name or timestamp. `make test-archives` builds both twice
 with every input's mtime and the umask changed in between and requires the
 same sha256. `make test-version` extracts the source archive, rebuilds from it
-with no git, and requires the locked binary and `DSperate v3.0.3 (f5fa35e)`.
+with no git, and requires the locked binary and `DSperate v3.0.5 (ddf2910)`.
 
 ## Linkage
 
@@ -292,8 +309,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `62a5f6c750aeea445d0e9be2d4295233980781cdd3333ffd0091366084b0b1e4` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,677,384 bytes | 14,224 bytes |
+| sha256 | `86bf025da6ed951b7e8b29326f62bb0f341c7e2700fb060444f3305d5d459a1d` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 4,693,784 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
@@ -337,13 +354,17 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 ## Earlier releases (historical)
 
+DSperate 3.0.3 (upstream v3.0.3, `f5fa35e`, binary `62a5f6c7...`, 4,677,384
+bytes, the same five patches) was published on 2026-10-13 after MLP1
+qualification on 2026-10-10 (see the README). The v3.0.5 candidate in this
+revision has not been on a device yet.
+
 DSperate 2.1.1 (upstream v2.1.1, `baec965`, the same five patches) was
 published on 2026-09-26 after MLP1 qualification from 2026-09-24 to
-2026-09-26. The v3.0.3 candidate in this revision (`62a5f6c7...`) passed MLP1
-qualification on 2026-10-10 (see the README). Not re-run for 3.0.3, because
-the code behind them is unchanged and the host tests replay them: the DraStic
-fallback while uninstalled, the account fault rows and the `.7z` refusal. The
-v2.0.0 release checks below are retained as history.
+2026-09-26. Not re-run for 3.0.3, because the code behind them is unchanged
+and the host tests replay them: the DraStic fallback while uninstalled, the
+account fault rows and the `.7z` refusal. The v2.0.0 release checks below are
+retained as history.
 
 Two clean `FORCE=1` builds agreed on both artifact hashes. The SDK, flags and
 runtime library allowlist are unchanged. The larger emulator contains the new
