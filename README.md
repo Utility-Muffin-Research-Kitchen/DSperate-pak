@@ -32,9 +32,10 @@ sign-in as it was.
 The next candidate updates the source pin to **DSperate v3.0.5** with five
 reviewed pak patches, and adds the **DSperate TATE** core. Its runtime manifest
 says `pak_version` `3.0.5`. It is host-verified only so far: two clean builds
-reproduce the profile-guided binary `86bf025d...`, trained on all eight of
-upstream's v3.0.5 scenes, and the wrapper tests cover TATE on the panel and on
-a TV. `--version` reports `v3.0.5 (ddf2910)`. Device qualification is pending,
+and a rebuild from the corresponding-source archive reproduce the
+profile-guided binary `86bf025d...`, trained on all eight of upstream's v3.0.5
+scenes, and the pak ZIP is byte-for-byte reproducible. The wrapper tests cover
+TATE on the panel and on a TV. `--version` reports `v3.0.5 (ddf2910)`. Device qualification is pending,
 including the speed of v3.0.5's new Vulkan presenter and TATE's picture and
 controls on the panel and on a TV, so no 3.0.5 pak is published.
 
