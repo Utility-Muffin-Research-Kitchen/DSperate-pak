@@ -1,8 +1,8 @@
 diff --git a/src/frontend/sdl/lid.cpp b/src/frontend/sdl/lid.cpp
-index f0dd35b..716b60b 100644
+index 883fbd9..da638e7 100644
 --- a/src/frontend/sdl/lid.cpp
 +++ b/src/frontend/sdl/lid.cpp
-@@ -73,8 +73,12 @@ bool Lid::poll(bool& closed) {
+@@ -75,8 +75,12 @@ bool Lid::poll(bool& closed) {
    }
  #endif
    // No switch (or host froze before the event): clocks drifted >1s apart.
@@ -11,8 +11,8 @@ index f0dd35b..716b60b 100644
 +  // blanks games that blank on lid-close and restore the screen only on an
 +  // open they saw coming (Contra 4), so nothing happens.
    const s64 skew = clock_ns(CLOCK_BOOTTIME) - clock_ns(CLOCK_MONOTONIC);
--  if (skew - skew_ns_ > 1000000000 && fd_ < 0) { pulse_ = 6; std::fprintf(stderr, "lid: host resumed from suspend; pulsing the lid\n"); }
-+  if (skew - skew_ns_ > 1000000000 && fd_ < 0 && closed_) { pulse_ = 6; std::fprintf(stderr, "lid: host resumed from suspend; pulsing the lid\n"); }
+-  if (skew - skew_ns_ > 1000000000 && fd_ < 0) { pulse_ = 1; std::fprintf(stderr, "lid: host resumed from suspend; pulsing the lid\n"); }
++  if (skew - skew_ns_ > 1000000000 && fd_ < 0 && closed_) { pulse_ = 1; std::fprintf(stderr, "lid: host resumed from suspend; pulsing the lid\n"); }
    skew_ns_ = skew;
-   if (pulse_ > 0) { --pulse_; closed = pulse_ > 0; return true; }
-   closed = closed_;
+   bool raw = closed_;
+   if (pulse_ > 0) { --pulse_; raw = true; }
