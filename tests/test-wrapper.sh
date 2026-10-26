@@ -23,6 +23,14 @@ check_contains() {
     # check_contains <file> <needle> <label>
     if grep -Fq -- "$2" "$1"; then pass; else fail "$3 (missing: $2)"; fi
 }
+check_line() {
+    # check_line <file> <whole line> <label>
+    if grep -Fxq -- "$2" "$1"; then pass; else fail "$3 (missing line: $2)"; fi
+}
+
+# What Jawaka sets per launch: the launching core and the screen. A value
+# inherited from the shell running the tests must not choose for them.
+unset JAWAKA_GAME_CORE_ID LEAF_DISPLAY_OUTPUT
 
 SD="$TMP/sd"
 PAK="$TMP/DSperate.pak"
@@ -298,6 +306,102 @@ printf '4\n' >"$STAMP"
 run_wrapper "$ROM"
 check_contains "$GLOBAL_INI" "face_fix = auto" "custom pad.face_fix preserved"
 
+# --- TATE --------------------------------------------------------------------
+# dsperate_tate is this same script under another core id. The picture turns,
+# a game starts stacked, and on the panel the controls turn with the MLP1:
+# each DS button takes the global binding a quarter turn round from it. Saves
+# and states are plain DSperate's; the per-game file is TATE's own.
+cp "$REPO_ROOT/pak/defaults/dsperate.ini" "$GLOBAL_INI"
+printf '%s\n' "$SHIPPED_VERSION" >"$STAMP"
+tate_run() { ( JAWAKA_GAME_CORE_ID=dsperate_tate; export JAWAKA_GAME_CORE_ID; run_wrapper "$@" ); }
+TATE_PAD='^(up|right|down|left|x|a|b|y|axis_leftx|axis_lefty) = '
+
+run_wrapper "$ROM"
+PLAIN_SAVE="$(sed -n '/^--save$/{n;p;}' "$OUT")"
+PLAIN_XDG="$(cat "$OUT.xdg")"
+PLAIN_INI="$PLAIN_XDG/dsperate/games/Game (USA).ini"
+cp "$GLOBAL_INI" "$TMP/global-before-tate.ini"
+
+tate_run "$ROM"
+TATE_XDG="$(cat "$OUT.xdg")"
+TATE_INI="$TATE_XDG/dsperate/games/Game (USA).ini"
+[ "$TATE_XDG" = "${PLAIN_XDG%/xdg}/xdg-tate" ] && pass || fail "TATE has its own per-game scope (got $TATE_XDG)"
+[ "$(sed -n '/^--save$/{n;p;}' "$OUT")" = "$PLAIN_SAVE" ] && pass || fail "TATE shares the battery save"
+check_line "$TATE_INI" "states = $SD/States/DSperate/$KEY1" "TATE shares the states path"
+check_line "$TATE_INI" "cache = $SD/.userdata/mlp1/dsperate/cache/$KEY1" "TATE shares the cache"
+[ "$(sed -n 2p "$OUT.video")" = 270 ] && pass || fail "TATE turns the picture a quarter"
+check_contains "$OUT.video" "heap=system-uncached" "TATE keeps the dmabuf heap pin"
+[ "$(tail -n 1 "$OUT")" = "$ROM" ] && pass || fail "TATE content path is the last argument"
+if grep -q '^--layout$' "$OUT"; then fail "TATE forces the layout on the command line"; else pass; fi
+check_line "$TATE_INI" "layout = vertical" "TATE starts stacked"
+check_line "$TATE_INI" "layout_cycle = vertical,single,dominant_v" "TATE cycles portrait layouts only"
+# The shipped global binds x = x and y = y and leaves a, b, the d-pad and the
+# stick at DSperate's defaults (a = b, b = a, dpup..., leftx/lefty).
+check_line "$TATE_INI" "up = dpleft" "TATE up is the global left"
+check_line "$TATE_INI" "right = dpup" "TATE right is the global up"
+check_line "$TATE_INI" "down = dpright" "TATE down is the global right"
+check_line "$TATE_INI" "left = dpdown" "TATE left is the global down"
+check_line "$TATE_INI" "x = y" "TATE X is the global Y"
+check_line "$TATE_INI" "a = x" "TATE A is the global X"
+check_line "$TATE_INI" "b = b" "TATE B is the global A"
+check_line "$TATE_INI" "y = a" "TATE Y is the global B"
+check_line "$TATE_INI" "axis_leftx = -lefty" "TATE stick x is the global stick y reversed"
+check_line "$TATE_INI" "axis_lefty = leftx" "TATE stick y is the global stick x"
+cmp -s "$GLOBAL_INI" "$TMP/global-before-tate.ini" && pass || fail "a TATE launch changed the global config"
+if grep -Eq "$TATE_PAD|^layout_cycle" "$PLAIN_INI"; then fail "TATE keys reached plain DSperate's per-game file"; else pass; fi
+
+# Relaunching rewrites the turned keys in place, never twice.
+tate_run "$ROM"
+[ "$(grep -c '^up = ' "$TATE_INI")" = 1 ] && [ "$(grep -c '^layout = ' "$TATE_INI")" = 1 ] \
+    && pass || fail "a TATE relaunch duplicated a key"
+
+# A layout picked with the hotkey is remembered in the same file and kept.
+sed 's/^layout = vertical$/layout = single/' "$TATE_INI" >"$TATE_INI.edit"
+mv "$TATE_INI.edit" "$TATE_INI"
+tate_run "$ROM"
+check_line "$TATE_INI" "layout = single" "TATE keeps a hotkey-picked layout"
+
+# The turn follows the player's own global bindings, read as DSperate reads
+# them: a comment ends a value and the last line for a key wins.
+cat >"$GLOBAL_INI" <<'INI'
+[pad]
+a = y
+up = dpdown   # mine
+x = x
+axis_lefty = -lefty
+x = leftshoulder
+INI
+tate_run "$ROM"
+check_line "$TATE_INI" "b = y" "TATE B follows a custom global A"
+check_line "$TATE_INI" "right = dpdown" "TATE right follows a commented global up"
+check_line "$TATE_INI" "a = leftshoulder" "TATE A follows the last global X"
+check_line "$TATE_INI" "y = a" "TATE Y follows the default global B"
+check_line "$TATE_INI" "axis_leftx = lefty" "TATE reverses an already reversed axis"
+
+# A global binding the per-game file cannot hold stops the launch.
+printf '[pad]\na = x\\y\n' >"$GLOBAL_INI"
+rm -f "$OUT"
+if tate_run "$ROM" >/dev/null 2>&1; then fail "TATE launched with a binding it could not copy"; else pass; fi
+[ ! -e "$OUT" ] && pass || fail "TATE launched after the control turn failed"
+cp "$TMP/global-before-tate.ini" "$GLOBAL_INI"
+
+# On a TV the screen turns instead of the MLP1, so the controls stay as
+# configured. The picture still turns and the layout stays TATE's.
+( LEAF_DISPLAY_OUTPUT=hdmi; export LEAF_DISPLAY_OUTPUT; tate_run "$ROM" )
+if grep -Eq "$TATE_PAD" "$TATE_INI"; then fail "TATE on a TV kept turned controls"; else pass; fi
+[ "$(sed -n 2p "$OUT.video")" = 270 ] && pass || fail "TATE on a TV turns the picture"
+check_line "$TATE_INI" "layout = single" "TATE on a TV keeps the layout"
+check_line "$TATE_INI" "states = $SD/States/DSperate/$KEY1" "TATE on a TV keeps the bound paths"
+( LEAF_DISPLAY_OUTPUT=panel; export LEAF_DISPLAY_OUTPUT; tate_run "$ROM" )
+check_line "$TATE_INI" "up = dpleft" "TATE back on the panel turns the controls again"
+
+# Plain DSperate is untouched by any of it.
+run_wrapper "$ROM"
+[ "$(cat "$OUT.xdg")" = "$PLAIN_XDG" ] && pass || fail "plain DSperate kept its scope"
+[ "$(sed -n 2p "$OUT.video")" = unset ] && pass || fail "plain DSperate does not turn the picture"
+( JAWAKA_GAME_CORE_ID=dsperate; export JAWAKA_GAME_CORE_ID; run_wrapper "$ROM" )
+[ "$(sed -n 2p "$OUT.video")" = unset ] && pass || fail "core id dsperate is plain DSperate"
+
 # --- archive policy and visible errors ---------------------------------------
 # A launch that cannot proceed shows the notice instead of exiting silently.
 ZIP="$SD/Roms/NDS/Some Folder/Game (USA).zip"
@@ -489,6 +593,17 @@ if grep -q '^UMRK_RA_ACCOUNT_STATE=' "$OUT.env"; then fail "env.sh account state
 ra_launch "$ROM" "UMRK_ENV_FILE=$ENVSH" UMRK_RA_ACCOUNT_VERSION=1 UMRK_RA_ACCOUNT_STATE=never-configured
 check_contains "$OUT.env" "UMRK_RA_ACCOUNT_STATE=[never-configured]" "the per-launch snapshot wins over env.sh"
 if grep -q 'from env.sh' "$OUT.env"; then fail "env.sh leaked beside a real snapshot"; else pass; fi
+
+# TATE runs more helpers (the control turn), and none of them sees the account
+# either. A snapshot it is given still reaches the emulator unchanged.
+: >"$HELPER_LOG"
+ra_launch "$ROM" JAWAKA_GAME_CORE_ID=dsperate_tate \
+    UMRK_RA_ACCOUNT_VERSION=1 UMRK_RA_ACCOUNT_STATE=configured \
+    UMRK_RA_ACCOUNT_USERNAME=player-one "UMRK_RA_ACCOUNT_PASSWORD=$RA_SECRET" \
+    UMRK_RA_ACCOUNT_REVISION=7
+[ -e "$OUT" ] && pass || fail "TATE account launch reached the emulator"
+if [ -s "$HELPER_LOG" ]; then fail "a TATE helper saw the account environment: $(sort -u "$HELPER_LOG" | tr '\n' ' ')"; else pass; fi
+check_contains "$OUT.env" "UMRK_RA_ACCOUNT_PASSWORD=[$RA_SECRET]" "TATE passes the snapshot through"
 
 echo "test-wrapper: $((checks - failures))/$checks checks passed"
 [ "$failures" -eq 0 ]
