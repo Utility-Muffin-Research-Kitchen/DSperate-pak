@@ -1,5 +1,5 @@
 diff --git a/src/core/nds.cpp b/src/core/nds.cpp
-index dfca8de..6d0d68e 100644
+index 90dcdb6..34488de 100644
 --- a/src/core/nds.cpp
 +++ b/src/core/nds.cpp
 @@ -274,7 +274,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
@@ -14,10 +14,10 @@ index dfca8de..6d0d68e 100644
    // Rename over the old one so an interrupted write can't leave a truncated override.
    if (std::rename(tmp.c_str(), path.c_str()) != 0) { err = "cannot replace"; std::remove(tmp.c_str()); return false; }
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 52d5c18..de5692c 100644
+index cab98b8..09e544b 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -326,15 +326,35 @@ void load_save(NDS& nds, const std::string& path) {
+@@ -331,15 +331,35 @@ void load_save(NDS& nds, const std::string& path) {
    }
  }
  
@@ -60,7 +60,7 @@ index 52d5c18..de5692c 100644
    nds.cart->clear_sram_dirty();
  }
  
-@@ -494,12 +514,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
+@@ -500,12 +520,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
    if (!nds.save_state(w, err)) { std::fprintf(stderr, "state: cannot save: %s\n", err.c_str()); return false; }
    write_layout_chunk(w, layout);
    write_cheevos_chunk(w);

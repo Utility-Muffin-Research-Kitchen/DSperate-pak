@@ -101,6 +101,12 @@ CACHE_ROOT="$STATE_ROOT/cache"
 MANAGED_DIR="$STATE_ROOT/retroachievements"
 NOTICE_FONT=""
 
+# The pak declares two cores on this one script, and Jawaka names the one it
+# launched. dsperate_tate is TATE (see "TATE" below); anything else, including
+# a direct launch with no core id, is plain DSperate.
+TATE=0
+[ "${JAWAKA_GAME_CORE_ID:-}" = dsperate_tate ] && TATE=1
+
 log() { printf 'dsperate: %s\n' "$*" 2>/dev/null >>"$LOG_FILE" || true; }
 
 # The launcher's font, resolved the way Jawaka's on-screen display resolves it:
@@ -230,8 +236,14 @@ esac
 
 # A scoped XDG root gives DSperate a private config directory per game, so its
 # per-game override files cannot collide between two ROMs with the same
-# basename. The shared global config is passed with --config instead.
-export XDG_CONFIG_HOME="$GAME_DIR/xdg"
+# basename. The shared global config is passed with --config instead. TATE has
+# a scope of its own, so the layout and turned controls it keeps per game never
+# reach plain DSperate's.
+if [ "$TATE" = 1 ]; then
+    export XDG_CONFIG_HOME="$GAME_DIR/xdg-tate"
+else
+    export XDG_CONFIG_HOME="$GAME_DIR/xdg"
+fi
 CFG_DIR="$XDG_CONFIG_HOME/dsperate"
 GAME_INI="$CFG_DIR/games/$ROM_STEM.ini"
 mkdir -p "$CFG_DIR/games" || die "cannot create game config directory"
@@ -358,6 +370,45 @@ cfg_migrate_key() {
     ini_set "$1" "$2" "$3" "$5"
 }
 
+# ini_unset FILE SECTION KEY...
+#
+# Remove keys from one section in one pass, preserving every other line. A
+# missing file or key is already unset. Same temp-and-rename write as ini_set.
+ini_unset() {
+    _file="$1" _section="$2"
+    shift 2
+    [ -f "$_file" ] || return 0
+    _tmp="$_file.tmp.$$"
+    if awk -v S="$_section" -v KEYS="$*" '
+        BEGIN { n = split(KEYS, ks, " "); for (i = 1; i <= n; i++) drop[ks[i]] = 1; in_s = 0 }
+        {
+            line = $0
+            if (line ~ /^[ \t]*\[[^]]*\][ \t]*$/) {
+                hdr = line
+                sub(/^[ \t]*\[/, "", hdr)
+                sub(/\][ \t]*$/, "", hdr)
+                gsub(/^[ \t]+|[ \t]+$/, "", hdr)
+                in_s = (hdr == S)
+                print line
+                next
+            }
+            if (in_s) {
+                k = line
+                sub(/=.*/, "", k)
+                gsub(/^[ \t]+|[ \t]+$/, "", k)
+                if (k in drop) next
+            }
+            print line
+        }
+    ' "$_file" >"$_tmp" 2>/dev/null && mv -f "$_tmp" "$_file" 2>/dev/null; then
+        :
+    else
+        rm -f "$_tmp" 2>/dev/null || true
+        log "could not update $_file"
+        return 1
+    fi
+}
+
 record_defaults_version() {
     _tmp="$INSTALLED_VERSION_FILE.tmp.$$"
     printf '%s\n' "$1" >"$_tmp" 2>/dev/null && mv -f "$_tmp" "$INSTALLED_VERSION_FILE" 2>/dev/null \
@@ -409,6 +460,103 @@ ini_set "$GAME_INI" paths states "$STATES_DIR" || die "cannot bind save-state pa
 ini_set "$GAME_INI" paths screenshots "$SHOTS_DIR" || die "cannot bind screenshot path"
 ini_set "$GAME_INI" paths cache "$CACHE_DIR" || die "cannot bind cache path"
 ini_set "$GAME_INI" paths firmware_override "$GAME_DIR/firmware.ovr" || die "cannot bind firmware sidecar"
+
+# --- TATE --------------------------------------------------------------------
+# TATE is the same emulator with the two DS screens stacked down a portrait
+# picture. DSperate turns its picture a quarter (DS_ROTATE, below), so on the
+# panel the player turns the MLP1 clockwise, d-pad at the top, and the stacked
+# screens fill the panel's long side. Saves, states, the cache and the global
+# config are the same as plain DSperate's, so switching cores keeps progress;
+# only the per-game file is TATE's own (the XDG scope above).
+
+# global_pad KEY DEFAULT prints the [pad] value DSperate reads from the global
+# config, parsed the way its own loader does: the last line that sets the key
+# wins and a # or ; ends the value. A key the file does not set has DSperate's
+# built-in default.
+global_pad() {
+    awk -v K="$1" -v D="$2" '
+        BEGIN { in_s = 0; v = D }
+        {
+            line = $0
+            sub(/\r$/, "", line)
+            gsub(/^[ \t]+|[ \t]+$/, "", line)
+            if (line ~ /^\[.*\]$/) {
+                hdr = substr(line, 2, length(line) - 2)
+                gsub(/^[ \t]+|[ \t]+$/, "", hdr)
+                in_s = (hdr == "pad")
+                next
+            }
+            if (!in_s || line ~ /^[#;]/) next
+            eq = index(line, "=")
+            if (eq == 0) next
+            k = substr(line, 1, eq - 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", k)
+            if (k != K) next
+            val = substr(line, eq + 1)
+            sub(/[#;].*/, "", val)
+            gsub(/^[ \t]+|[ \t]+$/, "", val)
+            v = val
+        }
+        END { print v }
+    ' "$GLOBAL_INI"
+}
+
+# An axis remap value with its direction reversed: [-]<axis>, or none.
+axis_reversed() {
+    case "$1" in
+        none) printf 'none' ;;
+        -*) printf '%s' "${1#-}" ;;
+        +*) printf '%s%s' - "${1#+}" ;;
+        *) printf '%s%s' - "$1" ;;
+    esac
+}
+
+if [ "$TATE" = 1 ]; then
+    # A game starts stacked. A layout picked with the hotkey is remembered in
+    # this same file and wins from then on, and the hotkey steps only through
+    # the layouts that suit a portrait picture.
+    cfg_ensure_key "$GAME_INI" video layout vertical || die "cannot set the TATE layout"
+    cfg_ensure_key "$GAME_INI" video layout_cycle vertical,single,dominant_v ||
+        die "cannot set the TATE layout"
+
+    # On the panel the controls turn with the MLP1: each DS button takes the
+    # global binding of the one a quarter turn round from it, and the stick's
+    # axes swap, so the d-pad, face buttons and stylus all point where the
+    # picture does. They are worked out from the global config on every launch,
+    # so a change made there carries over; they are this wrapper's keys, not
+    # the player's. A TV (LEAF_DISPLAY_OUTPUT=hdmi, from Leaf 0.14) is the
+    # thing turned instead, so there the keys are removed and the global
+    # controls apply as they are. Before Leaf 0.14 the variable is unset and
+    # counts as the panel.
+    if [ "${LEAF_DISPLAY_OUTPUT:-panel}" = hdmi ]; then
+        ini_unset "$GAME_INI" pad up right down left x a b y axis_leftx axis_lefty ||
+            die "cannot reset the TATE controls"
+        log "TATE on a TV: picture turned, controls as configured"
+    else
+        _up="$(global_pad up dpup)"
+        _right="$(global_pad right dpright)"
+        _down="$(global_pad down dpdown)"
+        _left="$(global_pad left dpleft)"
+        _x="$(global_pad x y)"
+        _a="$(global_pad a b)"
+        _b="$(global_pad b a)"
+        _y="$(global_pad y x)"
+        _axis_x="$(global_pad axis_leftx leftx)"
+        _axis_y="$(global_pad axis_lefty lefty)"
+        { ini_set "$GAME_INI" pad up "$_left" &&
+          ini_set "$GAME_INI" pad right "$_up" &&
+          ini_set "$GAME_INI" pad down "$_right" &&
+          ini_set "$GAME_INI" pad left "$_down" &&
+          ini_set "$GAME_INI" pad x "$_y" &&
+          ini_set "$GAME_INI" pad a "$_x" &&
+          ini_set "$GAME_INI" pad b "$_a" &&
+          ini_set "$GAME_INI" pad y "$_b" &&
+          ini_set "$GAME_INI" pad axis_leftx "$(axis_reversed "$_axis_y")" &&
+          ini_set "$GAME_INI" pad axis_lefty "$_axis_x"; } ||
+            die "cannot turn the TATE controls"
+        log "TATE on the panel: picture and controls turned"
+    fi
+fi
 
 # --- archive policy ----------------------------------------------------------
 # The emulator unpacks a deflated ROM from a .zip under paths.cache, which the
@@ -510,14 +658,19 @@ fi
 
 # --- presentation ------------------------------------------------------------
 # Weston owns the panel transform on MLP1, so the emulator runs a plain
-# fullscreen Wayland window and never rotates the output itself. DS_ROTATE is
-# cleared so an inherited value cannot make the display engine rotate a second
-# time.
+# fullscreen Wayland window and never rotates the output for the panel. Only
+# TATE asks DSperate to turn its own picture: 270 puts the picture's top at
+# the window's left edge, which is the clockwise turn the controls above
+# assume. Otherwise DS_ROTATE is cleared so an inherited value cannot turn it.
 export SDL_VIDEODRIVER=wayland
 export WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-0}"
 export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run}"
 export SDL_JOYSTICK_DISABLE_UDEV=1
-unset DS_ROTATE
+if [ "$TATE" = 1 ]; then
+    export DS_ROTATE=270
+else
+    unset DS_ROTATE
+fi
 # The Wayland dmabuf sink allocates four panel-sized buffers (five under GPU
 # present). DSperate prefers the CMA heap, but the MLP1's pool is 16 MB and
 # page cache usually fills it, so the allocation fails and the picture falls

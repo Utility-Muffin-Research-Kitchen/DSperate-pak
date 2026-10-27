@@ -1451,7 +1451,7 @@ index 0000000..1f954fc
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index de5692c..da0f762 100644
+index 09e544b..1742a64 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
 @@ -29,6 +29,7 @@
@@ -1462,7 +1462,7 @@ index de5692c..da0f762 100644
  #endif
  #if DSPERATE_NET
  #include "net/lan_mp.h"
-@@ -1038,6 +1039,12 @@ bool g_restart = false;
+@@ -1053,6 +1054,12 @@ bool g_restart = false;
  }
  
  static int run(int argc, char** argv) {
@@ -1475,7 +1475,7 @@ index de5692c..da0f762 100644
    const char* rom = nullptr;
    const char* config_arg = nullptr;
    long frame_limit = 0;
-@@ -1129,6 +1136,10 @@ static int run(int argc, char** argv) {
+@@ -1146,6 +1153,10 @@ static int run(int argc, char** argv) {
      // Implies enabled, but a later --no-cheevos still wins (applied in order).
      else if (arg("--cheevos-token")) { cli.set("cheevos.token_file", argv[++i]); cli.set("cheevos.enabled", "true"); }
      else if (arg("--cheevos-user")) cli.set("cheevos.username", argv[++i]);
@@ -1486,16 +1486,16 @@ index de5692c..da0f762 100644
  #endif
      else if (flag("--autoload")) cli.set("emu.autoload", "true");
      else if (flag("--no-autoload")) cli.set("emu.autoload", "false");
-@@ -1203,7 +1214,7 @@ static int run(int argc, char** argv) {
+@@ -1220,7 +1231,7 @@ static int run(int argc, char** argv) {
    }
-   auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
+   auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "paths.saves", "paths.states", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
                                                "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.sink", "video.disp", "video.fbdev", "video.gpu_present", "video.vsync", "audio.enabled", "audio.volume",
 -                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
 +                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username", "cheevos.managed_dir"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
    apply_cli();
    if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
    const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
-@@ -2637,7 +2648,18 @@ sdl_ready:
+@@ -2713,7 +2724,18 @@ sdl_ready:
    // RetroAchievements, Casual mode. Off unless asked for; every failure is
    // reported once and then ignored.
    ds::cheevos::Client cheevos;
@@ -1515,7 +1515,7 @@ index de5692c..da0f762 100644
  #endif
  #if DSPERATE_NET
    std::unique_ptr<ds::net::LanMp> lan;
-@@ -2831,7 +2853,8 @@ sdl_ready:
+@@ -2907,7 +2929,8 @@ sdl_ready:
        // toast, which is drawn onto the canvas afterwards.
        if (m.kind == ds::cheevos::Message::Kind::Unlock && cfg.flag("cheevos.auto_screenshot", false))
          shot_pending = true;
@@ -1525,7 +1525,7 @@ index de5692c..da0f762 100644
        Toast t;
        t.header = m.kind == ds::cheevos::Message::Kind::Unlock ? "ACHIEVEMENT UNLOCKED"
                 : m.kind == ds::cheevos::Message::Kind::Problem ? "RETROACHIEVEMENTS" : nullptr;
-@@ -2854,20 +2877,38 @@ sdl_ready:
+@@ -2930,20 +2953,38 @@ sdl_ready:
      }
      std::string status() const override {
        if (!c) return "NOT AVAILABLE IN THIS BUILD";
@@ -1573,7 +1573,7 @@ index de5692c..da0f762 100644
      }
      std::string progress() const override {
        if (!c || sum.total == 0) return {};
-@@ -2999,6 +3040,27 @@ sdl_ready:
+@@ -3075,6 +3116,27 @@ sdl_ready:
        // A password is never kept; an expired token fails and the player
        // signs in again from the menu.
        ds::cheevos::Credentials creds;
@@ -1601,7 +1601,7 @@ index de5692c..da0f762 100644
        // A token file named on the command line overrides whatever is
        // stored; nothing is written back, the file isn't ours.
        const std::string token_file = cfg.str("cheevos.token_file");
-@@ -3028,6 +3090,7 @@ sdl_ready:
+@@ -3104,6 +3166,7 @@ sdl_ready:
        }
        if (!creds.empty()) cheevos.sign_in_with_token(creds.username, creds.token);
        else std::fprintf(stderr, "cheevos: not signed in\n");

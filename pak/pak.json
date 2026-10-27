@@ -2,7 +2,7 @@
   "name": "DSperate",
   "id": "org.umrk.dsperate",
   "platform": "mlp1",
-  "pak_version": "3.0.3",
+  "pak_version": "3.0.5",
   "min_leaf_version": "0.12.0",
   "provides": {
     "schema": 1,
@@ -11,7 +11,8 @@
       {
         "system_id": "NDS",
         "add_alternate_cores": [
-          "dsperate"
+          "dsperate",
+          "dsperate_tate"
         ]
       }
     ],
@@ -19,6 +20,15 @@
       {
         "id": "dsperate",
         "display_name": "DSperate",
+        "type": "path",
+        "path": "scripts/run.sh",
+        "supports_menu": true,
+        "supports_savestate": false,
+        "supports_disk_control": false
+      },
+      {
+        "id": "dsperate_tate",
+        "display_name": "DSperate TATE",
         "type": "path",
         "path": "scripts/run.sh",
         "supports_menu": true,

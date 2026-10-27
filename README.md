@@ -14,26 +14,60 @@ there is no new tile and no app to open. Install this pak and DSperate appears
 in the Nintendo DS core picker, where you choose it per system or per game.
 DraStic stays the default, and existing DraStic choices keep working. DSperate
 keeps its own battery saves and save states, separate from DraStic's.
+From 3.0.5 the picker also offers **DSperate TATE**, which stacks the two
+screens down the long side of the screen (see [TATE](#tate)).
 
-This repository is a pure content pak. It declares a `type: "path"` core,
-carries the compiled DSperate binary and a launch wrapper, and builds from a
+This repository is a pure content pak. It declares two `type: "path"` cores on
+one launch wrapper, carries the compiled DSperate binary, and builds from a
 clean clone with no sibling checkout.
 
 ## Status
 
-[DSperate 3.0.3](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v3.0.3)
+[DSperate 3.0.5](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v3.0.5)
 is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. It updates the
-source pin to **DSperate v3.0.3** with five reviewed pak patches, rebased onto
-upstream's 3.0 rewrite without changing what they do. On Leaf 0.12.0-beta.6 or
-newer, DSperate signs in with the account saved in **Settings > Games >
-Accounts**, and an older Leaf leaves DSperate's own sign-in as it was.
+source pin to **DSperate v3.0.5** with five reviewed pak patches and adds the
+**DSperate TATE** core; only TATE on a TV wants Leaf 0.14 (see [TATE](#tate)).
+On Leaf 0.12.0-beta.6 or newer, DSperate signs in with the account saved in
+**Settings > Games > Accounts**, and an older Leaf leaves DSperate's own
+sign-in as it was.
 
 Two clean builds and a rebuild from the corresponding-source archive reproduce
-the profile-guided binary `62a5f6c7...`, trained on all eight of upstream's
-v3.0.3 scenes, and the pak ZIP is byte-for-byte reproducible. `--version`
-reports `v3.0.3 (f5fa35e)`.
+the profile-guided binary `11124142...`, trained on all eight of upstream's
+v3.0.5 scenes and a Mario Kart DS boot the pak adds, and the pak ZIP is
+byte-for-byte reproducible. The wrapper tests cover TATE on the panel and on a
+TV. `--version` reports `v3.0.5 (ddf2910)`.
 
-This exact build passed MLP1 device qualification on 2026-10-10. It updated
+Checked on an MLP1 on 2026-10-27. This exact binary held New Super Mario Bros.,
+Golden Sun: Dark Dawn and Spirit Tracks at full speed, and Mario Kart DS at
+99.9%, over the same frame windows as the table below. It reinstalled through
+Pak Rat with every save, state and setting unchanged, a Mario Kart DS session
+played by hand signed in to RetroAchievements and saved a state, and TATE's
+picture and controls turned as described in [TATE](#tate) on a TV and, after
+the TV was unplugged, on the MLP1's screen. The same source with the previous
+profile updated over 3.0.3 through Pak Rat with every save, state and setting
+unchanged, and TATE's stylus and pause menu turned too. Not re-run for 3.0.5:
+loading a save state, fast forward, the layout hotkey, and suspend and resume.
+
+What 3.0.5 changes for you:
+
+- **DSperate TATE**, a second Nintendo DS core for playing with the MLP1 or
+  your TV turned on its side. See [TATE](#tate).
+- A game that can't start now says why on the screen, instead of returning to
+  Leaf with no message. Press any button to go back.
+- The picture is scaled on the GPU with a Vulkan render pass, now tried first,
+  instead of 3.0.3's compute pass. The speed table below is still 3.0.3's.
+- Mario Kart DS runs more smoothly. The build is now also tuned on Mario Kart
+  DS itself, which otherwise dropped frames in bursts.
+- Upstream fixed a stall in its JIT, a 2D drawing timing issue and, with
+  `gpu3d = true`, hairline gaps between 3D polygons.
+- Save states from 3.0.3 keep loading: the state format is the same.
+- After a suspend the DS clock still runs behind by the time the MLP1 slept,
+  as in 3.0.3. Upstream now catches the clock up when the DS lid opens, but the
+  MLP1 has no lid, and the pak keeps DSperate from faking a lid close on resume
+  because that leaves some games, such as Contra 4, on a black screen.
+
+DSperate 3.0.3 (binary `62a5f6c7...`, `--version` `v3.0.3 (f5fa35e)`) passed
+MLP1 device qualification on 2026-10-10. It updated
 over 2.1.1 through Pak Rat with every battery save, save state and setting
 unchanged, and the defaults update added `face_fix = off` beside your X and Y
 binds. Every button matched its printed label, the stick and R2 drove the
@@ -46,7 +80,7 @@ reinstalling through Pak Rat kept all 27 DSperate data files byte for byte and
 kept DSperate as the game's emulator. The speed comparison with 2.1.1 is
 below.
 
-What 3.0.3 changes for you:
+What 3.0.3 changed:
 
 - **Save states from DSperate 2.x don't load.** Upstream changed the state
   format, and 3.0.3 shows a message instead of loading an older state. Battery
@@ -131,10 +165,11 @@ every step, a full card, damaged files and a missing account directory.
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
-This candidate builds with a profile trained for v3.0.3 with the pak's own
-GCC 12.3.0 toolchain. `make pgo-train` retrains it in the same pinned image
-from the scene ROMs and the real DS BIOS and firmware, which you supply and
-which never enter the repository; see `standalone/PROVENANCE.md`.
+This candidate builds with a profile trained for v3.0.5 with the pak's own
+GCC 12.3.0 toolchain, on upstream's scenes plus a Mario Kart DS boot.
+`make pgo-train` retrains it in the same pinned image from the scene ROMs and
+the real DS BIOS and firmware, which you supply and which never enter the
+repository; see `standalone/PROVENANCE.md`.
 
 Both archives are written inside the same pinned image with sorted entries,
 `SOURCE_DATE_EPOCH` timestamps, owner 0 and fixed modes, so anyone rebuilding
@@ -189,7 +224,7 @@ quit.
 | Data | Location |
 | --- | --- |
 | Configuration | `$USERDATA_PATH/dsperate/dsperate.ini`, on the primary card |
-| Per-game settings | `$USERDATA_PATH/dsperate/games/<game key>/` |
+| Per-game settings | `$USERDATA_PATH/dsperate/games/<game key>/`, with TATE's under `xdg-tate/` there |
 | Battery saves | `$SAVES_PATH/DSperate/<game key>/<ROM stem>.sav`, for the selected card |
 | Save states and screenshots | `$STATES_PATH/DSperate/<game key>/`, for the selected card |
 | ROM unpack cache | `$USERDATA_PATH/dsperate/cache/<game key>/`, always (never beside the ROM) |
@@ -235,7 +270,7 @@ message names the reason, which is also written to `dsperate.log`.
 
 ### Updating from DSperate 2.x
 
-DSperate 3.0.3 can't load save states made by 2.x, because upstream changed
+DSperate 3 can't load save states made by 2.x, because upstream changed
 the state format. Before you update, save in the game the normal way in
 anything you play from a state. Battery saves, settings and your
 RetroAchievements account carry over, and the old state files stay where they
@@ -308,12 +343,43 @@ The MLP1 profile:
 The pause menu is driven with the DS buttons: A confirms, B backs out, and the
 d-pad moves.
 
+## TATE
+
+**DSperate TATE** shows the two DS screens stacked down the long side of the
+screen, about a third bigger than DSperate's own stacked layout. Choose it in
+the Nintendo DS core picker like DSperate, per system or per game.
+
+- On the MLP1's screen, turn the MLP1 a quarter clockwise, d-pad at the top.
+  The d-pad, face buttons and stick turn with it, so the d-pad points the way
+  the game does and the face buttons sit where the DS has them. TATE works the
+  turned controls out from your DSperate controls every time it starts, so a
+  change you make to your DSperate controls carries over.
+- On a TV, turn the TV a quarter clockwise instead and hold the MLP1 as usual.
+  Leaf 0.14 or newer (the beta is fine) tells TATE it's on a TV, and the
+  controls then stay as you set them. Leaf 0.12 and 0.13 can't tell TATE that,
+  so on a TV it still turns the controls as if you were holding the MLP1 on its
+  side: up on the d-pad works as right, and so on. To play TATE on a TV, update
+  Leaf to 0.14 first.
+- TATE uses DSperate's battery saves, save states and settings, so you can
+  switch between the two in the middle of a game. Only the layout and the
+  turned controls are kept apart, in TATE's own per-game settings.
+- A game starts with the screens stacked. The layout hotkey steps through the
+  stacked, single-screen and large-and-small (`dominant_v`) layouts, and TATE
+  remembers the one you pick for each game.
+- Hotkeys use the buttons named in [Controls](#controls), not turned ones. Hold
+  Select and press the d-pad button that points right in your hand to change
+  the layout.
+- Leaf passes its RetroAchievements account only to DSperate for now. Once
+  DSperate has used a Leaf account, TATE plays without achievements, and it
+  leaves the account and DSperate's sign-in as they are.
+
 ## Display
 
 Leaf runs under Weston on the MLP1. The wrapper starts DSperate as a single
-fullscreen Wayland window and leaves the panel transform to Weston, so the
-emulator never rotates the output itself. Correct orientation and input
-coordinates are demonstrated on hardware during qualification.
+fullscreen Wayland window and leaves the panel transform to Weston. DSperate
+turns its own picture only for TATE, a quarter turn (`DS_ROTATE=270`) that puts
+the top of the picture at the left edge of the screen. Correct orientation and
+input coordinates are demonstrated on hardware during qualification.
 
 ## Known limits
 
@@ -334,6 +400,9 @@ coordinates are demonstrated on hardware during qualification.
   the defaults this package has changed since its first test builds; it does not
   guess at values you set yourself.
 - No bundled games, BIOS or firmware.
+- DSperate TATE on a TV needs Leaf 0.14 or newer for its controls to stay as
+  you set them. On Leaf 0.12 and 0.13 it turns them on a TV too, as it does on
+  the MLP1's screen. See [TATE](#tate).
 
 ## Artwork
 
