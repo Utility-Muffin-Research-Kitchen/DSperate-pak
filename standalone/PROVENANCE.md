@@ -377,10 +377,10 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 DSperate 3.0.3 (upstream v3.0.3, `f5fa35e`, binary `62a5f6c7...`, 4,677,384
 bytes, the same five patches) was published on 2026-10-13 after MLP1
-qualification on 2026-10-10 (see the README). The v3.0.5 candidate in this
-revision has had the speed measurement above on an MLP1, and the same source
-with the eight-scene profile passed the Pak Rat update and the TATE picture and
-control checks there on 2026-10-27; full qualification is pending.
+qualification on 2026-10-10 (see the README). DSperate 3.0.5, this revision,
+was checked on an MLP1 on 2026-10-27 (the speed measurement above, Pak Rat
+install and update, TATE on the screen and on a TV; the README lists what was
+and was not re-run) and published the same day.
 
 DSperate 2.1.1 (upstream v2.1.1, `baec965`, the same five patches) was
 published on 2026-09-26 after MLP1 qualification from 2026-09-24 to

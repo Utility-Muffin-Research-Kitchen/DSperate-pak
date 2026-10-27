@@ -5,7 +5,7 @@
   "id": "org.umrk.dsperate",
   "name": "DSperate",
   "summary": "An optional Nintendo DS standalone emulator, selectable per system or per game.",
-  "description": "Adds DSperate, a standalone Nintendo DS emulator, as an alternate core for the existing Nintendo DS system. There is no app to open and no new tile: installing this pak adds DSperate to the Nintendo DS core picker, and you choose it per system or per game. DraStic stays the default, and your existing DraStic choices keep working. DSperate keeps its own saves and save states, separate from DraStic's. On Leaf 0.12.0-beta.6 or newer it signs in to RetroAchievements with the account saved in Leaf.",
+  "description": "Adds DSperate, a standalone Nintendo DS emulator, as an alternate core for the existing Nintendo DS system. There is no app to open and no new tile: installing this pak adds DSperate to the Nintendo DS core picker, and you choose it per system or per game. DraStic stays the default, and your existing DraStic choices keep working. DSperate keeps its own saves and save states, separate from DraStic's. It also adds DSperate TATE, which stacks the two screens down the long side for playing with the MLP1 or a TV turned on its side. On Leaf 0.12.0-beta.6 or newer it signs in to RetroAchievements with the account saved in Leaf.",
   "author": "Utility Muffin Research Kitchen",
   "repo_url": "https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak",
   "categories": ["emulation", "content"],
@@ -14,7 +14,7 @@
     "packages": [
       {
         "platform": "mlp1",
-        "version": "3.0.3",
+        "version": "3.0.5",
         "min_leaf_version": "0.12.0",
         "artifact_name": "DSperate.mlp1.pak.zip",
         "install_name": "DSperate.pak",

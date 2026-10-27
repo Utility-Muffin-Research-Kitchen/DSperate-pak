@@ -23,29 +23,30 @@ clean clone with no sibling checkout.
 
 ## Status
 
-[DSperate 3.0.3](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v3.0.3)
-is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. On Leaf
-0.12.0-beta.6 or newer, DSperate signs in with the account saved in
+[DSperate 3.0.5](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v3.0.5)
+is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. It updates the
+source pin to **DSperate v3.0.5** with five reviewed pak patches and adds the
+**DSperate TATE** core; only TATE on a TV wants Leaf 0.14 (see [TATE](#tate)).
+On Leaf 0.12.0-beta.6 or newer, DSperate signs in with the account saved in
 **Settings > Games > Accounts**, and an older Leaf leaves DSperate's own
 sign-in as it was.
 
-The next candidate updates the source pin to **DSperate v3.0.5** with five
-reviewed pak patches, and adds the **DSperate TATE** core. Its runtime manifest
-says `pak_version` `3.0.5` and, like 3.0.3, needs Leaf 0.12.0 or newer; only
-TATE on a TV wants Leaf 0.14 (see [TATE](#tate)). Two clean builds and a
-rebuild from the corresponding-source archive reproduce the profile-guided
-binary `11124142...`, trained on all eight of upstream's v3.0.5 scenes and a
-Mario Kart DS boot the pak adds, and the pak ZIP is byte-for-byte
-reproducible. The wrapper tests cover TATE on the panel and on a TV.
-`--version` reports `v3.0.5 (ddf2910)`.
+Two clean builds and a rebuild from the corresponding-source archive reproduce
+the profile-guided binary `11124142...`, trained on all eight of upstream's
+v3.0.5 scenes and a Mario Kart DS boot the pak adds, and the pak ZIP is
+byte-for-byte reproducible. The wrapper tests cover TATE on the panel and on a
+TV. `--version` reports `v3.0.5 (ddf2910)`.
 
-On an MLP1 on 2026-10-27 this exact binary held New Super Mario Bros., Golden
-Sun: Dark Dawn and Spirit Tracks at full speed, and Mario Kart DS at 99.9%,
-over the same frame windows as the table below. The same source
-with the previous profile updated over 3.0.3 through Pak Rat with every save,
-state and setting unchanged, and TATE's picture, controls, stylus and pause
-menu all turned as described in [TATE](#tate). Full device qualification of
-this build, and TATE on a TV, are pending, so no 3.0.5 pak is published.
+Checked on an MLP1 on 2026-10-27. This exact binary held New Super Mario Bros.,
+Golden Sun: Dark Dawn and Spirit Tracks at full speed, and Mario Kart DS at
+99.9%, over the same frame windows as the table below. It reinstalled through
+Pak Rat with every save, state and setting unchanged, a Mario Kart DS session
+played by hand signed in to RetroAchievements and saved a state, and TATE's
+picture and controls turned as described in [TATE](#tate) on a TV and, after
+the TV was unplugged, on the MLP1's screen. The same source with the previous
+profile updated over 3.0.3 through Pak Rat with every save, state and setting
+unchanged, and TATE's stylus and pause menu turned too. Not re-run for 3.0.5:
+loading a save state, fast forward, the layout hotkey, and suspend and resume.
 
 What 3.0.5 changes for you:
 
