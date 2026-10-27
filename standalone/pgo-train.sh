@@ -11,10 +11,11 @@
 # turned into a training build. Upstream's tools/pgo_refresh.sh assumes a
 # Debian cross compiler and qemu, which this image does not have.
 #
-# DS_ROMS holds the scene ROMs under upstream's names (see
-# pgo-train-in-container.sh). DS_BIOS holds the real DS BIOS and firmware, as
-# bios9.bin, bios7.bin and firmware.bin or Leaf's nds_bios_arm9.bin,
-# nds_bios_arm7.bin and nds_firmware.bin. Neither is shipped or committed.
+# DS_ROMS holds the scene ROMs under upstream's names, plus the pak's own
+# `Mario Kart DS.nds` (see pgo-train-in-container.sh). DS_BIOS holds the real
+# DS BIOS and firmware, as bios9.bin, bios7.bin and firmware.bin or Leaf's
+# nds_bios_arm9.bin, nds_bios_arm7.bin and nds_firmware.bin. Neither is
+# shipped or committed.
 #
 # On success standalone/pgo/aarch64 is replaced and the lock's pgo block
 # records the new profile. Review the diff, then run `make standalone FORCE=1`:

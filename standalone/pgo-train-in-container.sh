@@ -53,6 +53,9 @@ HEADLESS="$(find "$BUILD" -type f -name dsperate-headless -perm -u+x -print -qui
 # Upstream's scene list (tools/pgo_refresh.sh at the pinned tag): five recorded
 # replays, and three boots from frame 0 that reach their attract-mode demos,
 # the only training for the boot path and the cold translation burst after it.
+# One pak-local boot follows them: Mario Kart DS, whose attract-mode race the
+# upstream scenes do not cover. Without it, the MLP1 release build dropped
+# frames in that race that a build with no profile at all did not.
 # The real BIOS and firmware matter: without them the JIT translates
 # one-instruction blocks and the profile describes another program.
 COMMON=(--direct --bios9 /bios/bios9.bin --bios7 /bios/bios7.bin --firmware /bios/firmware.bin)
@@ -75,10 +78,11 @@ train meteos --replay /src/scenes/meteos.dsin --frames 600 "/roms/Meteos.nds" &
 train gsdd   --frames 2400 "/roms/Golden Sun - Dark Dawn.nds" &
 train st     --frames 2400 "/roms/Legend of Zelda, The - Spirit Tracks.nds" &
 train nsmb   --frames 1500 "/roms/New Super Mario Bros..nds" &
+train mkds   --frames 2400 "/roms/Mario Kart DS.nds" &
 wait
 
 SCENES=""
-for name in mlbis sm64 etody dbori meteos gsdd st nsmb; do
+for name in mlbis sm64 etody dbori meteos gsdd st nsmb mkds; do
   [ -f "/work/scenes/$name.ok" ] && SCENES="${SCENES:+$SCENES }$name"
 done
 [ -n "$SCENES" ] || { echo "pgo-train-in-container: no scene ran" >&2; exit 1; }
