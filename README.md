@@ -31,12 +31,13 @@ sign-in as it was.
 
 The next candidate updates the source pin to **DSperate v3.0.5** with five
 reviewed pak patches, and adds the **DSperate TATE** core. Its runtime manifest
-says `pak_version` `3.0.5`. Two clean builds and a rebuild from the
-corresponding-source archive reproduce the profile-guided binary
-`11124142...`, trained on all eight of upstream's v3.0.5 scenes and a Mario
-Kart DS boot the pak adds, and the pak ZIP is byte-for-byte reproducible. The
-wrapper tests cover TATE on the panel and on a TV. `--version` reports
-`v3.0.5 (ddf2910)`.
+says `pak_version` `3.0.5` and, like 3.0.3, needs Leaf 0.12.0 or newer; only
+TATE on a TV wants Leaf 0.14 (see [TATE](#tate)). Two clean builds and a
+rebuild from the corresponding-source archive reproduce the profile-guided
+binary `11124142...`, trained on all eight of upstream's v3.0.5 scenes and a
+Mario Kart DS boot the pak adds, and the pak ZIP is byte-for-byte
+reproducible. The wrapper tests cover TATE on the panel and on a TV.
+`--version` reports `v3.0.5 (ddf2910)`.
 
 On an MLP1 on 2026-10-27 this exact binary held New Super Mario Bros., Golden
 Sun: Dark Dawn and Spirit Tracks at full speed, and Mario Kart DS at 99.9%,
@@ -352,9 +353,12 @@ the Nintendo DS core picker like DSperate, per system or per game.
   the game does and the face buttons sit where the DS has them. TATE works the
   turned controls out from your DSperate controls every time it starts, so a
   change you make to your DSperate controls carries over.
-- On a TV, turn the TV instead and hold the MLP1 as usual. Leaf 0.14 or newer
-  tells TATE it's on a TV, and the controls then stay as you set them. An older
-  Leaf can't tell TATE that, so it turns the controls on a TV too.
+- On a TV, turn the TV a quarter clockwise instead and hold the MLP1 as usual.
+  Leaf 0.14 or newer (the beta is fine) tells TATE it's on a TV, and the
+  controls then stay as you set them. Leaf 0.12 and 0.13 can't tell TATE that,
+  so on a TV it still turns the controls as if you were holding the MLP1 on its
+  side: up on the d-pad works as right, and so on. To play TATE on a TV, update
+  Leaf to 0.14 first.
 - TATE uses DSperate's battery saves, save states and settings, so you can
   switch between the two in the middle of a game. Only the layout and the
   turned controls are kept apart, in TATE's own per-game settings.
@@ -395,6 +399,9 @@ input coordinates are demonstrated on hardware during qualification.
   the defaults this package has changed since its first test builds; it does not
   guess at values you set yourself.
 - No bundled games, BIOS or firmware.
+- DSperate TATE on a TV needs Leaf 0.14 or newer for its controls to stay as
+  you set them. On Leaf 0.12 and 0.13 it turns them on a TV too, as it does on
+  the MLP1's screen. See [TATE](#tate).
 
 ## Artwork
 
