@@ -249,10 +249,12 @@ and flags are.
   aarch64, so the binary runs natively on an arm64 Docker host;
 - it runs upstream's v3.0.5 scene list (unchanged from v3.0.3) with the real
   BIOS and firmware: five recorded replays (`mlbis sm64 etody dbori meteos`)
-  and three boots from frame 0 (`gsdd st nsmb`), and records in the MANIFEST
-  only the scenes that ran. All eight ran for this profile (MANIFEST date
-  2026-10-26T21:13Z), with the same ROMs and BIOS as the 3.0.3 profile.
-  Upstream's two DSi scenes need DSi dumps and are not trained;
+  and three boots from frame 0 (`gsdd st nsmb`), plus one pak-local boot,
+  `mkds` (Mario Kart DS, 2400 frames, see below). It records in the MANIFEST
+  only the scenes that ran. All nine ran for this profile (MANIFEST date
+  2026-10-27T18:46Z), with the same ROMs and BIOS as the 3.0.3 profile and the
+  USA Mario Kart DS. Upstream's two DSi scenes need DSi dumps and are not
+  trained;
 - the `.gcda` files, the `MANIFEST`, and a sha256 over the whole directory are
   written to `standalone/pgo/aarch64` and the lock. The build refuses a profile
   whose directory hash does not match the lock, and CMake refuses one whose
@@ -273,7 +275,26 @@ The strict flags are warning switches only; the binary is byte-identical to the 
 build. `make test-pgo` checks, without a build or a device, that the profile
 directory, its MANIFEST and the build flags match the lock. Two clean
 `FORCE=1` builds with the locked profile agree byte for byte.
-Device performance of this candidate must be re-measured before any claim.
+
+### Why the pak adds a Mario Kart DS scene
+
+Measured on the MLP1 on 2026-10-27 through real Leaf launches, at the 60 fps
+cap over frames 900 to 2400 of Mario Kart DS's boot with no input, the build
+trained on upstream's eight scenes alone went over the 16.7 ms frame budget in
+bursts: 4 of 11 runs had 244 to 367 of 1,500 frames over, 8.6% in all. Built
+with the same flags and no profile, v3.0.3 and v3.0.5 both stayed at 0.8% to
+0.9% over in 28 runs, so the profile caused it, not a source change; the
+presenter did not either (turning it off was worse). Dropping the profile is no
+fix: without it New Super Mario Bros., Golden Sun: Dark Dawn and Spirit Tracks
+spend 10% to 13% more time emulating each frame.
+
+With `mkds` trained, alternating with the eight-scene build on the same device
+(eight runs each for Mario Kart DS, three for the others): Mario Kart DS 1.0%
+over (worst run 46 frames) against 3.6%, New Super Mario Bros. and Golden Sun:
+Dark Dawn unchanged at 0.0% and 0.2%, Spirit Tracks 3.4% against 5.9%. Spirit
+Tracks varies from run to run on the same build (1.2% to 6.0% across these
+sessions). The scene trains on the same attract-mode race that was measured; a
+race played with input has not been measured.
 
 ## Archives
 
@@ -309,7 +330,7 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `86bf025da6ed951b7e8b29326f62bb0f341c7e2700fb060444f3305d5d459a1d` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| sha256 | `11124142318017f55a54e87831e18e98e4ae3059ba349fd9fbf4894c87a231cd` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
 | Size | 4,693,784 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
@@ -357,7 +378,9 @@ on the device separately; the SDL window-surface route remains the fallback.
 DSperate 3.0.3 (upstream v3.0.3, `f5fa35e`, binary `62a5f6c7...`, 4,677,384
 bytes, the same five patches) was published on 2026-10-13 after MLP1
 qualification on 2026-10-10 (see the README). The v3.0.5 candidate in this
-revision has not been on a device yet.
+revision has had the speed measurement above on an MLP1, and the same source
+with the eight-scene profile passed the Pak Rat update and the TATE picture and
+control checks there on 2026-10-27; full qualification is pending.
 
 DSperate 2.1.1 (upstream v2.1.1, `baec965`, the same five patches) was
 published on 2026-09-26 after MLP1 qualification from 2026-09-24 to

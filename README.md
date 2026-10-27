@@ -31,13 +31,20 @@ sign-in as it was.
 
 The next candidate updates the source pin to **DSperate v3.0.5** with five
 reviewed pak patches, and adds the **DSperate TATE** core. Its runtime manifest
-says `pak_version` `3.0.5`. It is host-verified only so far: two clean builds
-and a rebuild from the corresponding-source archive reproduce the
-profile-guided binary `86bf025d...`, trained on all eight of upstream's v3.0.5
-scenes, and the pak ZIP is byte-for-byte reproducible. The wrapper tests cover
-TATE on the panel and on a TV. `--version` reports `v3.0.5 (ddf2910)`. Device qualification is pending,
-including the speed of v3.0.5's new Vulkan presenter and TATE's picture and
-controls on the panel and on a TV, so no 3.0.5 pak is published.
+says `pak_version` `3.0.5`. Two clean builds and a rebuild from the
+corresponding-source archive reproduce the profile-guided binary
+`11124142...`, trained on all eight of upstream's v3.0.5 scenes and a Mario
+Kart DS boot the pak adds, and the pak ZIP is byte-for-byte reproducible. The
+wrapper tests cover TATE on the panel and on a TV. `--version` reports
+`v3.0.5 (ddf2910)`.
+
+On an MLP1 on 2026-10-27 this exact binary held New Super Mario Bros., Golden
+Sun: Dark Dawn and Spirit Tracks at full speed, and Mario Kart DS at 99.9%,
+over the same frame windows as the table below. The same source
+with the previous profile updated over 3.0.3 through Pak Rat with every save,
+state and setting unchanged, and TATE's picture, controls, stylus and pause
+menu all turned as described in [TATE](#tate). Full device qualification of
+this build, and TATE on a TV, are pending, so no 3.0.5 pak is published.
 
 What 3.0.5 changes for you:
 
@@ -47,6 +54,8 @@ What 3.0.5 changes for you:
   Leaf with no message. Press any button to go back.
 - The picture is scaled on the GPU with a Vulkan render pass, now tried first,
   instead of 3.0.3's compute pass. The speed table below is still 3.0.3's.
+- Mario Kart DS runs more smoothly. The build is now also tuned on Mario Kart
+  DS itself, which otherwise dropped frames in bursts.
 - Upstream fixed a stall in its JIT, a 2D drawing timing issue and, with
   `gpu3d = true`, hairline gaps between 3D polygons.
 - Save states from 3.0.3 keep loading: the state format is the same.
@@ -155,9 +164,10 @@ every step, a full card, damaged files and a missing account directory.
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
 This candidate builds with a profile trained for v3.0.5 with the pak's own
-GCC 12.3.0 toolchain. `make pgo-train` retrains it in the same pinned image
-from the scene ROMs and the real DS BIOS and firmware, which you supply and
-which never enter the repository; see `standalone/PROVENANCE.md`.
+GCC 12.3.0 toolchain, on upstream's scenes plus a Mario Kart DS boot.
+`make pgo-train` retrains it in the same pinned image from the scene ROMs and
+the real DS BIOS and firmware, which you supply and which never enter the
+repository; see `standalone/PROVENANCE.md`.
 
 Both archives are written inside the same pinned image with sorted entries,
 `SOURCE_DATE_EPOCH` timestamps, owner 0 and fixed modes, so anyone rebuilding
