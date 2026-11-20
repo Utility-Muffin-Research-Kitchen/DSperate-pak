@@ -8,8 +8,8 @@ Everything here is measured from the build, not from memory.
 | | |
 | --- | --- |
 | Upstream | `https://github.com/beebono/DSperate.git` |
-| Tag | `v3.0.5` |
-| Commit | `ddf2910e6d80220c6b22b4df61f0786ac9879cda` |
+| Tag | `v3.5.0` |
+| Commit | `3a2bcd2cca016b2c38f9a11a5159ab9c3d16b883` |
 | Licence | GPL-3.0-or-later (`LICENSE`) |
 | Vulkan headers | `https://github.com/KhronosGroup/Vulkan-Headers.git` `v1.4.321` (`2cd90f9d20df57eac214c148f3aed885372ddcfe`), build-time only, Apache-2.0 OR MIT |
 | Patches | `patches/0001-pak-cache-and-archive-policy.patch`, `patches/0002-save-durability.patch`, `patches/0003-lid-resume-no-fabricated-close.patch`, `patches/0004-deterministic-version.patch` and `patches/0005-dsperate-ra-account-adapter.patch` (sha256-locked; see below) |
@@ -19,21 +19,24 @@ Everything here is measured from the build, not from memory.
 The five patches are locked by sha256 in `upstream.lock.json`; the build
 applies them in order and refuses a patch whose hash differs.
 
-Reviewed against [upstream v3.0.5](https://github.com/beebono/DSperate/releases/tag/v3.0.5)
-on 2026-10-26, by rebasing the five patches from v3.0.3 onto v3.0.5 as commits.
-0002, 0004 and 0005 merged without conflicts; 0001 and 0003 needed a hand
-resolution. None changed what it does, and none became redundant:
+Reviewed against [upstream v3.5.0](https://github.com/beebono/DSperate/releases/tag/v3.5.0)
+on 2026-11-20, by rebasing the five patches from v3.0.5 onto v3.5.0 as commits
+(139 upstream commits: v3.0.6, v3.1.0, v3.2.0, v3.3.0, v3.4.0, v3.4.1 and
+v3.5.0). 0002, 0003 and 0004 applied without conflicts; 0001 and 0005 needed a
+hand resolution in the SDL frontend. None changed what it does, and none became
+redundant. One patch grew:
 
 | Patch | Decision |
 | --- | --- |
-| 0001 archive/cache policy | Keep and rebase. Only the frontend's include list conflicted (upstream added `<optional>`). v3.0.5's new `--saves`/`--states` flags and start-failure screen do not overlap the cache-root, single-entry and unsafe-path policies, which are still absent upstream. A refused archive sets the loader's error like any other failure, so v3.0.5's start-failure screen reports it; the wrapper refuses such archives with its own notice before launch in any case. |
-| 0002 save durability | Keep and rebase. v3.0.5 still writes battery saves and states with an unchecked `fclose`, and the firmware override without a checked flush and close. |
-| 0003 lid/resume | Keep and rebase. v3.0.4 rewrote `Lid::poll` so the guest sees every close for at least 60 emulated frames. The switchless resume pulse is now one frame, held for those 60, and it still fires on every resume of a device with no switch. The rebased patch keeps upstream's one-frame pulse and the hold, and adds the same `closed_` condition. |
+| 0001 archive/cache policy | Keep and rebase. The usage text and the list of keys the command line may set both conflicted with new upstream entries (`--gba-rom`, `--rumble-pak`, `--no-slot2`, `--clear-cache` now also clearing the Vulkan pipeline cache, and `video.colour`, `video.gpu3d_scale`); both sides were kept. The cache-root, single-entry and unsafe-path policies are still absent upstream. |
+| 0002 save durability | Keep, rebase and extend. v3.5.0 still writes battery saves and states with an unchecked `fclose`, and the firmware override without a checked flush and close. v3.2.0 added a GBA cartridge in slot 2 whose save is written back like the battery save, through `slot2::write_save`: a temporary, checked write and close, and a rename, but no flush or `fsync`. The frontend's write-back now goes through the same `write_file_durable`. |
+| 0003 lid/resume | Keep. Applies unchanged; `src/frontend/sdl/lid.cpp` did not move. v3.4.1's sleep fix (the whole system sleeps until an ARM7 interrupt wakes it) is the DS's own power management, not the host-resume lid pulse this patch stops. |
 | 0004 deterministic `--version` | Keep. Applies unchanged; `cmake/version.cmake` did not move. |
-| 0005 Leaf account adapter | Keep and rebase. The frontend hooks moved with v3.0.5's new start-up code and merged cleanly; the adapter's own three files apply unchanged. |
+| 0005 Leaf account adapter | Keep and rebase. The account page's status strings are translated since v3.4.0; the rebased page keeps upstream's `tr()` strings and appends the pak's `MANAGED BY LEAF` as before (untranslated, like the rest of the pak's own text). v3.4.1 also takes SIGINT and SIGTERM on one thread, set up first thing in `run()`; the adapter still captures and scrubs the account snapshot before that thread exists. v3.4.1's `DS_CHEEVOS_HOST` sends every request, the login included, to another server unchanged; the wrapper does not set it, so DSperate talks to RetroAchievements directly as before. |
 
-The v3.0.3 review (2026-10-10) re-anchored four of the five patches by hand
-after upstream rewrote comments across the whole tree (`46eb3b5`, `95c4a1f`).
+The v3.0.5 review (2026-10-26) resolved 0001 and 0003 by hand, and the v3.0.3
+review (2026-10-10) re-anchored four of the five patches after upstream
+rewrote comments across the whole tree (`46eb3b5`, `95c4a1f`).
 
 `standalone/patches/0001-pak-cache-and-archive-policy.patch` adds the pak's
 archive policy.
@@ -124,25 +127,29 @@ can report success from `fwrite` and still never reach the disk, so a save
 reported as successful might not be there. The patch adds a checked helper
 (`write_file_durable`): `fwrite`, `fflush`, `fsync`, `fclose` and `rename` are
 all checked, the temporary is removed on failure, and the previous committed
-file is left untouched. It also checks the firmware-override flush and close.
-A failed battery save stays dirty, so the next flush retries.
+file is left untouched. It also checks the firmware-override flush and close,
+and writes a slot-2 GBA cartridge's save back through the same helper. A failed
+battery or GBA save stays dirty, so the next flush retries.
 
 Save loading follows upstream, unchanged since v2.0.0. For a known chip,
 upstream loads the portion that fits and saves the original mismatched file as
 `.bak`; for an unknown chip, a supported save size selects the chip. This is different from
 refusing every short save. The removed guard read into live SRAM before checking
 the count, so it did not actually undo partial reads even in the old patch.
-The checked-write helper covers DS battery saves and save-state files, not
-upstream's new DSi NAND/SD persistence or mismatch-backup writes.
+The checked-write helper covers DS battery saves, GBA cartridge saves and
+save-state files, not upstream's DSi NAND/SD persistence or mismatch-backup
+writes. The pak sets no `paths.gba_games`, so no GBA game is offered unless you
+set one.
 
-Upstream v3.0.5 writes state format 4 and reads only format 4
+Upstream v3.5.0 writes state format 4 and reads only format 4
 (`src/core/state/state.h`: `FORMAT_VERSION` 4, `OLDEST_READABLE_VERSION` 4),
-as v3.0.3 did; `src/core/state/` is unchanged between the two. v3.0.5 gives
-the GPU raster's vertices a sub-pixel position, but does not save it: a loaded
-frame's vertices draw on whole pixels. States written by DSperate 2.x are
-format 3, and 3.x refuses them with a message instead of loading them. Battery saves are unaffected: the save-chip
-handling, the `.bak` logic and the firmware override format are unchanged, and
-so are the state file names, so old states stay on the card untouched.
+as v3.0.3 and v3.0.5 did, so 3.0.x states load. The chunks grew in ways older
+states still read: v3.1.0 saves the 3D geometry engine's busy timing (an older
+state loads as idle) and the bytes an analog patch replaced (an optional chunk).
+States written by DSperate 2.x are format 3, and 3.x refuses them with a message
+instead of loading them. Battery saves are unaffected: the save-chip handling,
+the `.bak` logic and the firmware override format are unchanged, and so are the
+state file names, so old states stay on the card untouched.
 
 ## Toolchain and flags
 
@@ -156,7 +163,7 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | Setting | Value | Why |
 | --- | --- | --- |
 | `CMAKE_SYSTEM_PROCESSOR` | `aarch64` | selects the AArch64 JIT and NEON kernels |
-| `CMAKE_BUILD_TYPE` | `RelWithDebInfo` | upstream default; debug info is stripped from the artifact |
+| `CMAKE_BUILD_TYPE` | `RelWithDebInfo` | upstream's default until v3.4.1, which made `Release` the default; kept so that this bump changes the source and not the optimisation level. Debug info is stripped from the artifact |
 | `DSPERATE_TESTS` | `OFF` | no test binaries ship |
 | `DSPERATE_HEADLESS` | `OFF` | the measurement harness does not ship |
 | `DSPERATE_CHEEVOS` | `ON` | upstream default; libcurl is `dlopen`ed at runtime, not linked |
@@ -165,27 +172,26 @@ CMake configuration (see `standalone/build-in-container.sh`):
 | `DSPERATE_WAYLAND` | `ON` | build the Wayland dmabuf tier; the build fails rather than substituting the stub |
 | `DSPERATE_VULKAN` | `ON` | build the Vulkan presenter and the optional GPU 3D raster (see below) |
 | `DSPERATE_VULKAN_INCLUDE` | `/vulkan-include` | the pinned Khronos headers; the image has none, and the build fails if the presenter is not enabled |
-| `DSPERATE_CHEEVOS_VERSION` | `3.0.5` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
+| `DSPERATE_CHEEVOS_VERSION` | `3.5.0` | passed explicitly; a shallow checkout has no tags for upstream's `git describe` fallback |
 | `DSPERATE_PGO` | `use` | consume the pak's own trained aarch64 profile (see below) |
 | `DSPERATE_PGO_DIR` | `/standalone/pgo/aarch64` | the locked profile; `build-dsperate.sh` verifies its sha256 before the build |
 | `DSPERATE_PGO_STRICT` | `ON` | keeps GCC's missing-profile and coverage-mismatch warnings; the build counts them and fails (see below) |
 
 `SOURCE_DATE_EPOCH` is the pinned commit's committer timestamp
-(`1792600541`). `DSPERATE_LOCK_VERSION=v3.0.5` and
-`DSPERATE_LOCK_COMMIT=ddf2910` are exported from the lock so `--version` is
+(`1795137615`). `DSPERATE_LOCK_VERSION=v3.5.0` and
+`DSPERATE_LOCK_COMMIT=3a2bcd2` are exported from the lock so `--version` is
 deterministic.
 
 ### Presenters
 
-v3 adds two ways to scale and compose the picture off the CPU into the scanout
-buffer (`video.gpu_present`, on by default): Vulkan, and the Rockchip RGA
-through V4L2 mem2mem. Since v3.0.5 Vulkan is tried first, and it draws with a
-render pass on the scanout buffer (vertex and fragment shaders, shipped
-precompiled in the source tree) instead of v3.0.3's compute pass.
+v3 scales and composes the picture off the CPU into the scanout buffer
+(`video.gpu_present`, on by default) with Vulkan: a render pass on the scanout
+buffer (vertex and fragment shaders, shipped precompiled in the source tree),
+since v3.0.5. v3.5.0 removed the second presenter, the Rockchip RGA through
+V4L2 mem2mem, which declined on the MLP1 anyway (the stock kernel exposes the
+RGA only as the vendor `/dev/rga`, not as a V4L2 node). `video.gpu_present` is
+now on or off, and `rga` or `vulkan` in an older config read as on.
 
-- The RGA presenter is compiled (the sysroot's `linux/videodev2.h` has
-  multi-planar mem2mem), but it declines on the MLP1: the stock kernel exposes
-  the RGA only as the vendor `/dev/rga`, not as a V4L2 node.
 - The Vulkan presenter is what runs on the MLP1. Upstream compiles it, and the
   optional GPU 3D raster, only when it finds `vulkan/vulkan.h`, and otherwise
   builds stubs that decline. The pinned image has no Vulkan headers, so the
@@ -195,11 +201,16 @@ precompiled in the source tree) instead of v3.0.3's compute pass.
   `libvulkan`: the binary loads the device's loader with `dlopen`, and with it
   the stock Mali driver. The log says
   `video: GPU present on Mali-G52 ... (dma-buf import, dmabuf scanout)`.
+  Since v3.4.0 bilinear scaling, the seam blends, the chunky cells and colour
+  correction (`video.colour`) all work on it.
 - GPU 3D (`video.gpu3d`) stays off, upstream's default; the CPU raster remains
-  the exact reference. A player can turn it on per game.
+  the exact reference. A player can turn it on per game, and since v3.5.0 draw
+  the 3D at up to 2x or 4x (`video.gpu3d_scale`). v3.2.0 added an OpenGL ES
+  3.1 raster for devices without Vulkan; it is built (`DSPERATE_GLES`,
+  upstream's default, `dlopen`ing `libEGL` and `libGLESv2` with no headers), and
+  on the MLP1 the Vulkan raster opens first.
 - The DSperate TATE core sets `DS_ROTATE=270`. The Vulkan presenter turns the
   picture in the same pass, and so does the CPU scanline path it falls back to.
-  The RGA presenter declines a turned picture.
 
 The presenter decides one game in the qualification set. Measured with 3.0.3's
 compute-pass presenter on the MLP1 at the normal 60 fps cap through real Leaf
@@ -212,10 +223,17 @@ uses, measured the same as the stock driver for the presenter, so the pak
 does not load it.
 
 The wrapper names no video sink. With `SDL_VIDEODRIVER=wayland`, DSperate
-skips the direct-panel tiers and tries the Wayland dmabuf sink, then the window
-surface, then the renderer, as 2.1.1 did with `--no-disp --no-fbdev`. Naming
-`dmabuf` outright would drop the window-surface step: if the dmabuf allocation
-failed, the renderer could not take over the window and the launch would exit.
+skips the direct-panel tiers and tries the Wayland dmabuf sink. Since v3.5.0
+the next step is the SDL renderer, now drawing on its own present thread, and
+the window surface only for a turned picture. Up to 3.0.5 it was the window
+surface; the renderer came after it and could not take over a window a failed
+dmabuf attempt had used, so a launch that reached it exited. Checked on the MLP1 on
+2026-11-20 with upstream's `DS_DMABUF_FAIL_AFTER` test switch, through real
+Leaf launches of Super Mario 64 DS: with no dmabuf at all DSperate fell back to
+the OpenGL ES 2 renderer on the present thread and ran its 900 frames with 3
+of 600 over budget; failing after two buffers, it kept the two and stayed on
+the Vulkan present; TATE with no dmabuf fell back to the window surface with
+the picture turned.
 
 The wrapper does pin the dmabuf heap, with `DS_DMA_HEAP=system-uncached`. v3's
 dmabuf sink allocates four panel-sized buffers (five under GPU present) and
@@ -231,12 +249,13 @@ exhausted heap into a failed allocation; it still skips the CMA attempt.
 ## Profile-guided optimisation
 
 The build consumes a PGO profile trained with **this same toolchain** (Buildroot
-GCC 12.3.0) and these same flags, against the patched v3.0.5 source. Upstream
-ships profiles for other GCC versions only; CMake's fingerprint check refuses
-those, and a `.gcda` is bound to the compiler that wrote it, so they cannot be
-used here. A profile is also bound to its source: every upstream bump needs a
-new one. The fingerprint itself is unchanged from 3.0.3, because the compiler
-and flags are.
+GCC 12.3.0) and these same flags, against the patched v3.5.0 source. Upstream
+ships profiles for other GCC versions only (13.3, and 10.5 and 12.4 as
+secondary profiles); CMake's fingerprint check refuses those, and a `.gcda` is
+bound to the compiler that wrote it, so they cannot be used here. A profile is
+also bound to its source: every upstream bump needs a new one. The fingerprint
+changed from 3.0.5's (`2d22e81d...`) with the same compiler and flags, because
+upstream v3.4.1 took the `-g` flags and the build type's name out of it.
 
 `make pgo-train` (`standalone/pgo-train.sh`) produces it:
 
@@ -245,16 +264,21 @@ and flags are.
 - inside the pinned image, `pgo-train-in-container.sh` turns the lock's own
   CMake flags into an instrumented headless build (`-DDSPERATE_PGO=generate`,
   `-DDSPERATE_HEADLESS=ON`), so its `pgo-fingerprint` is the release build's
-  (`2d22e81dd634b4f0237a38ab089fbe6ee63d0368` for this revision). The image is
+  (`b752d035a1de1ab72bffc8f867fe1efcaffd59c7` for this revision). The image is
   aarch64, so the binary runs natively on an arm64 Docker host;
-- it runs upstream's v3.0.5 scene list (unchanged from v3.0.3) with the real
-  BIOS and firmware: five recorded replays (`mlbis sm64 etody dbori meteos`)
-  and three boots from frame 0 (`gsdd st nsmb`), plus one pak-local boot,
-  `mkds` (Mario Kart DS, 2400 frames, see below). It records in the MANIFEST
-  only the scenes that ran. All nine ran for this profile (MANIFEST date
-  2026-10-27T18:46Z), with the same ROMs and BIOS as the 3.0.3 profile and the
-  USA Mario Kart DS. Upstream's two DSi scenes need DSi dumps and are not
-  trained;
+- it runs upstream's v3.5.0 scene list with the real BIOS and firmware: five
+  recorded replays (`mlbis sm64 etody dbori meteos`), three boots from frame 0
+  (`gsdd st nsmb`) and, new since v3.2.0, `ghontour`: Guitar Hero: On Tour
+  mid-song from upstream's save state, with the Guitar Grip in slot 2 and the
+  game's display capture read back every VBlank. The pak adds one boot of its
+  own, `mkds` (Mario Kart DS, 2400 frames, see below). It records in the
+  MANIFEST only the scenes that ran. All ten ran for this profile (MANIFEST
+  date 2026-11-20T21:42Z), with the same ROMs and BIOS as the 3.0.5 profile.
+  `ghontour` needs the exact image upstream recorded the state with, since a
+  state refuses another ROM image: the USA dump RetroAchievements lists as
+  `Guitar Hero - On Tour (Control)` (SHA-1 `7b5abe0b...`) loads it, and the run
+  went from the state's frame 1612 to 2812. Upstream's two DSi scenes need DSi
+  dumps and are not trained;
 - the `.gcda` files, the `MANIFEST`, and a sha256 over the whole directory are
   written to `standalone/pgo/aarch64` and the lock. The build refuses a profile
   whose directory hash does not match the lock, and CMake refuses one whose
@@ -266,11 +290,15 @@ them.
 Verification is part of every build. The release build itself runs with
 `-DDSPERATE_PGO_STRICT=ON`, and `build-in-container.sh` counts the warnings the
 same way upstream's `tools/pgo_refresh.sh` does: it fails if any object outside
-the never-trained groups (the SDL frontend and the windowless video library
-only it links, rcheevos and the achievement code, the standalone tools, miniz,
-the reference kernels) has no profile, if any function's control flow no longer
-matches its profile, or if no strict warning appears at all. The current build
-reports 55 objects without a profile, all in those groups, and 0 mismatches.
+the never-trained groups (the SDL frontend and the code only it uses: the
+windowless video library, the menu translations and slot 2's GBA-cart
+compatibility table behind the game picker; rcheevos and the achievement code,
+the standalone tools, miniz, the reference kernels) has no profile, if any
+function's control flow no longer matches its profile, or if no strict warning
+appears at all. The translations and the compatibility table are new in v3.4.0
+and v3.2.0; upstream's own profile has no data for them either. The current
+build reports 57 objects without a profile, all in those groups, and 0
+mismatches.
 The strict flags are warning switches only; the binary is byte-identical to the non-strict
 build. `make test-pgo` checks, without a build or a device, that the profile
 directory, its MANIFEST and the build flags match the lock. Two clean
@@ -296,6 +324,11 @@ Tracks varies from run to run on the same build (1.2% to 6.0% across these
 sessions). The scene trains on the same attract-mode race that was measured; a
 race played with input has not been measured.
 
+The scene stays for 3.5.0. Measured on 2026-11-20 the same way, alternating
+with the published 3.0.5 (five runs each): 3.5.0 held Mario Kart DS at 0.3%
+over (worst run 7 frames), against 3.0.5's 3.9%, one of whose runs again went
+over in a burst (249 frames).
+
 ## Archives
 
 `make dist-pakrat` and `make dist-source` write the pak ZIP and the
@@ -306,7 +339,7 @@ Entries are sorted, every timestamp is `SOURCE_DATE_EPOCH`, owner and group are
 gzip header has no name or timestamp. `make test-archives` builds both twice
 with every input's mtime and the umask changed in between and requires the
 same sha256. `make test-version` extracts the source archive, rebuilds from it
-with no git, and requires the locked binary and `DSperate v3.0.5 (ddf2910)`.
+with no git, and requires the locked binary and `DSperate v3.5.0 (3a2bcd2)`.
 
 ## Linkage
 
@@ -330,8 +363,8 @@ highest glibc symbol version is `GLIBC_2.38`, the device's glibc.
 | --- | --- | --- |
 | Source | upstream at the pinned commit, plus the locked patches | `standalone/notice/notice.c` (this repository) |
 | Licence | GPL-3.0-or-later | MIT |
-| sha256 | `11124142318017f55a54e87831e18e98e4ae3059ba349fd9fbf4894c87a231cd` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
-| Size | 4,693,784 bytes | 14,224 bytes |
+| sha256 | `e587bbc1d245e0adb18366e914b392827b0bb29f7c62c4ca4513bc06d47f201f` | `c52bf4d447c5c855dd02dfb24d8eef962a5d3d079c15b3e4438ae2a5df34a160` |
+| Size | 5,320,520 bytes | 14,224 bytes |
 | Reproduced | two clean `FORCE=1` PGO builds agreed byte for byte | `FORCE=1` builds agreed byte for byte |
 
 The notice program is the fullscreen message the wrapper shows when a launch
@@ -377,10 +410,11 @@ on the device separately; the SDL window-surface route remains the fallback.
 
 DSperate 3.0.3 (upstream v3.0.3, `f5fa35e`, binary `62a5f6c7...`, 4,677,384
 bytes, the same five patches) was published on 2026-10-13 after MLP1
-qualification on 2026-10-10 (see the README). DSperate 3.0.5, this revision,
-was checked on an MLP1 on 2026-10-27 (the speed measurement above, Pak Rat
-install and update, TATE on the screen and on a TV; the README lists what was
-and was not re-run) and published the same day.
+qualification on 2026-10-10 (see the README). DSperate 3.0.5 (upstream v3.0.5,
+`ddf2910`, binary `11124142...`, 4,693,784 bytes, the same five patches, profile
+`c3e810f3...` on nine scenes) was checked on an MLP1 on 2026-10-27 (the Mario
+Kart DS measurement above, Pak Rat install and update, TATE on the screen and
+on a TV) and published the same day.
 
 DSperate 2.1.1 (upstream v2.1.1, `baec965`, the same five patches) was
 published on 2026-09-26 after MLP1 qualification from 2026-09-24 to
