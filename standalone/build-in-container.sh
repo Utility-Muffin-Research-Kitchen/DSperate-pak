@@ -92,13 +92,16 @@ cmake --build "$BUILD" --target dsperate -j"$JOBS" >/work/build.log 2>&1 || {
 # "profile count data file not found" and per-function "control flow ...
 # does not match" warnings in the log instead of silencing them. Whole groups
 # are never trained, because a headless training run never executes them: the
-# SDL frontend and the windowless video library only it links, the achievement
-# code, the standalone tools, miniz's inflate and the reference kernels. Anything outside those groups without a profile is a
+# SDL frontend and the libraries only it uses (the windowless video library,
+# the menu translations, and slot 2's GBA-cart compatibility table behind the
+# game picker), the achievement code, the standalone tools, miniz's inflate and
+# the reference kernels. Upstream's own profile has none of these either.
+# Anything outside those groups without a profile is a
 # scene that stopped running, and a control-flow mismatch is a function that
 # changed since the profile was made. Either one means the shipped binary is
 # not the profile-guided build the lock describes, so the build fails. This is
 # the same count upstream's tools/pgo_refresh.sh prints after a refresh.
-PGO_UNTRAINED='src/frontend/sdl/|src/frontend/video/|rcheevos|cheevos|tools#|miniz|kernels_ref'
+PGO_UNTRAINED='src/frontend/sdl/|src/frontend/video/|src/frontend/i18n/|src/core/slot2/compat\.cpp|rcheevos|cheevos|tools#|miniz|kernels_ref'
 pgo_missing="$(grep -c 'data file not found' /work/build.log || true)"
 pgo_unexpected="$(grep 'data file not found' /work/build.log | grep -cEv "$PGO_UNTRAINED" || true)"
 pgo_mismatch="$(grep -c 'control flow of function' /work/build.log || true)"

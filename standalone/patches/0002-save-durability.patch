@@ -1,8 +1,8 @@
 diff --git a/src/core/nds.cpp b/src/core/nds.cpp
-index 90dcdb6..34488de 100644
+index ca7d2f2..adc7ba0 100644
 --- a/src/core/nds.cpp
 +++ b/src/core/nds.cpp
-@@ -274,7 +274,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
+@@ -283,7 +283,10 @@ bool NDS::save_firmware_override(const std::string& path, std::string& err) {
        f.write(reinterpret_cast<const char*>(&page), 4);
        f.write(reinterpret_cast<const char*>(firmware.data() + page * FW_PAGE), FW_PAGE);
      }
@@ -14,10 +14,10 @@ index 90dcdb6..34488de 100644
    // Rename over the old one so an interrupted write can't leave a truncated override.
    if (std::rename(tmp.c_str(), path.c_str()) != 0) { err = "cannot replace"; std::remove(tmp.c_str()); return false; }
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index cab98b8..09e544b 100644
+index 410e33f..fc45d38 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -331,15 +331,35 @@ void load_save(NDS& nds, const std::string& path) {
+@@ -370,15 +370,35 @@ void load_save(NDS& nds, const std::string& path) {
    }
  }
  
@@ -60,7 +60,22 @@ index cab98b8..09e544b 100644
    nds.cart->clear_sram_dirty();
  }
  
-@@ -500,12 +520,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
+@@ -422,8 +442,13 @@ std::vector<ds::sdl::Menu::GameEntry> gba_offers(const NDS& nds, const ds::sdl::
+ void write_gba_save(NDS& nds, const std::string& path) {
+   ds::slot2::GameCart* g = nds.gba_cart();
+   if (!g || !g->save_dirty() || path.empty()) return;
++  // UMRK: the same durable write as the battery save (write_file_durable),
++  // where slot2::write_save leaves out the flush and fsync.
+   std::string err;
+-  if (!ds::slot2::write_save(*g, path, err)) { std::fprintf(stderr, "slot2: %s\n", err.c_str()); return; }
++  if (!g->save().empty() && !write_file_durable(path, g->save().data(), g->save().size(), err)) {
++    std::fprintf(stderr, "slot2: %s\n", err.c_str());
++    return;
++  }
+   g->clear_save_dirty();
+ }
+ 
+@@ -588,12 +613,10 @@ bool save_state_file(NDS& nds, const std::string& path, const ds::sdl::Display::
    if (!nds.save_state(w, err)) { std::fprintf(stderr, "state: cannot save: %s\n", err.c_str()); return false; }
    write_layout_chunk(w, layout);
    write_cheevos_chunk(w);
