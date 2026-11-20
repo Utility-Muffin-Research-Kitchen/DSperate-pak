@@ -700,11 +700,10 @@ FW="$(bios_file "$NDS_BIOS_DIR/nds_firmware.bin")"
 # Battery saves go to a per-source, per-game file under Saves/DSperate; the
 # states and cache paths were set above. No video sink is named: with
 # SDL_VIDEODRIVER=wayland, DSperate's automatic choice skips the direct-panel
-# tiers and tries the Wayland dmabuf sink, then the window surface, then the
-# renderer. Naming dmabuf would drop the window-surface step, and on the MLP1
-# the renderer cannot take over a window the dmabuf attempt already used, so a
-# launch whose dmabuf allocation failed would exit. --no-mic disables real
-# capture.
+# tiers and tries the Wayland dmabuf sink, then (since v3.5.0) the SDL renderer
+# on its own present thread, or the window surface for TATE's turned picture.
+# Both fallbacks were checked on the MLP1 with the dmabuf allocation forced to
+# fail. --no-mic disables real capture.
 set -- --config "$GLOBAL_INI" --cache-root-only --single-rom \
        --save "$SAVES_DIR/$ROM_STEM.sav" \
        --fullscreen --no-mic \

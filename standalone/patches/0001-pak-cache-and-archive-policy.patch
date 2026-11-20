@@ -142,10 +142,10 @@ index cde422f..e5f1079 100644
    ZipProgress progress = nullptr;   // called during extraction with bytes done/total; null for none
    void* progress_user = nullptr;
 diff --git a/src/core/nds.cpp b/src/core/nds.cpp
-index fe2b2f0..90dcdb6 100644
+index f57eca0..ca7d2f2 100644
 --- a/src/core/nds.cpp
 +++ b/src/core/nds.cpp
-@@ -311,6 +311,8 @@ bool NDS::load_rom(const std::string& path) {
+@@ -320,6 +320,8 @@ bool NDS::load_rom(const std::string& path) {
    if (zipped) {
      cart::ZipOpen how;
      how.fallback_dir = rom_cache_dir;
@@ -155,10 +155,10 @@ index fe2b2f0..90dcdb6 100644
      how.progress = rom_progress; how.progress_user = rom_progress_user;
      how.cancel = rom_cancel;
 diff --git a/src/core/nds.h b/src/core/nds.h
-index 2340f9b..22742ec 100644
+index 1eb40ae..7dbfcf3 100644
 --- a/src/core/nds.h
 +++ b/src/core/nds.h
-@@ -73,6 +73,8 @@ struct NDS {
+@@ -74,6 +74,8 @@ struct NDS {
    // be written (cart/zip_cache.h), and a progress callback. Set before load_rom.
    std::string rom_cache_dir;
    u64 rom_cache_max_bytes = 0;                 // 0: no limit
@@ -168,10 +168,10 @@ index 2340f9b..22742ec 100644
    void* rom_progress_user = nullptr;
    std::atomic<bool>* rom_cancel = nullptr;     // set from another thread to abandon the extraction
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 7f4e371..cab98b8 100644
+index 837a97b..410e33f 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -68,6 +68,7 @@
+@@ -79,6 +79,7 @@ using ds::i18n::trf;
  #include <cstring>
  #include <fstream>
  #include <functional>
@@ -179,19 +179,19 @@ index 7f4e371..cab98b8 100644
  #include <optional>
  #include <thread>
  #include <atomic>
-@@ -242,7 +243,10 @@ const char* kUsage =
-     "  --save F        battery save to start from, instead of <rom>.sav\n"
-     "                  (a --replay never writes the save back, so a scene repeats)\n"
+@@ -260,7 +261,10 @@ const char* kUsage =
      "  --clear-cache   delete every unpacked zipped game (the .dsperate directories beside the\n"
--    "                  games and paths.cache) except the one being launched, then run as usual\n";
-+    "                  games and paths.cache) except the one being launched, then run as usual\n"
+     "                  games and paths.cache) except the one being launched, and the compiled\n"
+     "                  Vulkan pipelines (vk_pipelines.bin in paths.cache, else ~/.cache/dsperate),\n"
+-    "                  then run as usual\n";
++    "                  then run as usual\n"
 +    "  --cache-root-only  unpack a zipped game only under paths.cache, never beside the archive\n"
 +    "  --single-rom    refuse an archive holding more than one image file instead of picking one\n"
 +    "  --inspect-cart F  print what loading F would need (kind, extract, bytes, entry) and exit\n";
  
  std::string rom_dir_of(const std::string& rom) {
    const size_t slash = rom.find_last_of('/');
-@@ -1002,6 +1006,27 @@ const char* extra_default(const char* key, bool pad, const ds::sdl::Config& cfg)
+@@ -1182,6 +1186,27 @@ const char* extra_default(const char* key, bool pad, const ds::sdl::Config& cfg)
    return ds::sdl::Input::mod_default(pad);
  }
  
@@ -219,7 +219,7 @@ index 7f4e371..cab98b8 100644
  } // namespace
  
  namespace {
-@@ -1015,6 +1040,7 @@ static int run(int argc, char** argv) {
+@@ -1196,6 +1221,7 @@ static int run(int argc, char** argv) {
    long frame_limit = 0;
    const char *record = nullptr, *replay = nullptr, *save_arg = nullptr, *load_state = nullptr;
    bool clear_cache = false;
@@ -227,7 +227,7 @@ index 7f4e371..cab98b8 100644
    bool rtc_host = false;              // --rtc-host: real clock even under replay
    const char* lan_host = nullptr; const char* lan_join = nullptr; const char* lan_name = "DSperate"; bool netplay = false;
    bool lan_guest = false;             // net.mode = guest: join only, never host
-@@ -1083,6 +1109,12 @@ static int run(int argc, char** argv) {
+@@ -1264,6 +1290,12 @@ static int run(int argc, char** argv) {
      else if (flag("--internet")) internet = true;   // exclusive with local wireless
      else if (arg("--dns")) dns_arg = argv[++i];
      else if (flag("--clear-cache")) clear_cache = true;
@@ -240,18 +240,18 @@ index 7f4e371..cab98b8 100644
      else if (arg("--record")) record = argv[++i];
      else if (arg("--replay")) replay = argv[++i];
      else if (arg("--save")) save_arg = argv[++i];
-@@ -1170,8 +1202,9 @@ static int run(int argc, char** argv) {
+@@ -1372,8 +1404,9 @@ static int run(int argc, char** argv) {
    }
    auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "paths.saves", "paths.states", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
-                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.sink", "video.disp", "video.fbdev", "video.gpu_present", "video.vsync", "audio.enabled", "audio.volume",
--                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
-+                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
+                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.colour", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.sink", "video.disp", "video.fbdev", "video.gpu_present", "video.vsync", "audio.enabled", "audio.volume",
+-                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "video.gpu3d_scale", "cart.preload", "emu.autosave_png", "emu.autoload", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
++                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "video.gpu3d_scale", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
    apply_cli();
 +  if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
    const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
    const std::string dsi_fw = cfg.str("paths.dsi_firmware");
    const bool have_dsi_fw = !dsi_fw.empty() && std::filesystem::exists(dsi_fw);
-@@ -1584,6 +1617,8 @@ sdl_ready:
+@@ -1807,6 +1840,8 @@ sdl_ready:
      ds::cart::RomSource::set_preload(pl == "true" || pl == "on" || pl == "1" ? ds::cart::RomSource::Preload::On : pl == "false" || pl == "off" || pl == "0" ? ds::cart::RomSource::Preload::Off : ds::cart::RomSource::Preload::Auto);
    }
    nds.rom_cache_dir = cfg.str("paths.cache", "");

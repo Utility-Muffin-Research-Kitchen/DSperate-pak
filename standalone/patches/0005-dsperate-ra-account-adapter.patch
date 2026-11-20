@@ -12,7 +12,7 @@ index e04d614..4538845 100644
    ${RC_API_SOURCES}
    ${RC_RUNTIME_SOURCES}
 diff --git a/src/cheevos/cheevos_client.cpp b/src/cheevos/cheevos_client.cpp
-index 54f5567..e8d65a6 100644
+index ab7651a..7a86fde 100644
 --- a/src/cheevos/cheevos_client.cpp
 +++ b/src/cheevos/cheevos_client.cpp
 @@ -15,6 +15,7 @@
@@ -39,7 +39,7 @@ index 54f5567..e8d65a6 100644
    std::lock_guard<std::mutex> lk(mu_);
    std::vector<Message> out;
    out.swap(messages_);
-@@ -435,6 +445,8 @@ void load_done(int result, const char* error_message, rc_client_t* c, void* user
+@@ -442,6 +452,8 @@ void load_done(int result, const char* error_message, rc_client_t* c, void* user
  
  void Client::sign_in(const std::string& username, const std::string& password) {
    if (!client_) return;
@@ -48,7 +48,7 @@ index 54f5567..e8d65a6 100644
    state_ = State::SigningIn;
    rc_client_begin_login_with_password(static_cast<rc_client_t*>(client_), username.c_str(),
                                        password.c_str(), &login_done, nullptr);
-@@ -442,6 +454,8 @@ void Client::sign_in(const std::string& username, const std::string& password) {
+@@ -449,6 +461,8 @@ void Client::sign_in(const std::string& username, const std::string& password) {
  
  void Client::sign_in_with_token(const std::string& username, const std::string& token) {
    if (!client_) return;
@@ -57,7 +57,7 @@ index 54f5567..e8d65a6 100644
    state_ = State::SigningIn;
    rc_client_begin_login_with_token(static_cast<rc_client_t*>(client_), username.c_str(),
                                     token.c_str(), &login_done, nullptr);
-@@ -506,14 +520,33 @@ u32 Client::game_id() const {
+@@ -513,14 +527,33 @@ u32 Client::game_id() const {
  
  void Client::on_signed_in(const std::string& display_name) {
    state_ = State::SignedIn;
@@ -1451,10 +1451,10 @@ index 0000000..1f954fc
 +
 +} // namespace ds::cheevos::ra_account
 diff --git a/src/frontend/sdl/main.cpp b/src/frontend/sdl/main.cpp
-index 09e544b..1742a64 100644
+index fc45d38..6351c84 100644
 --- a/src/frontend/sdl/main.cpp
 +++ b/src/frontend/sdl/main.cpp
-@@ -29,6 +29,7 @@
+@@ -33,6 +33,7 @@
  #include "cheevos/cheevos_client.h"
  #include "cheevos/cheevos_hash.h"
  #include "cheevos/cheevos_http.h"
@@ -1462,7 +1462,7 @@ index 09e544b..1742a64 100644
  #endif
  #if DSPERATE_NET
  #include "net/lan_mp.h"
-@@ -1053,6 +1054,12 @@ bool g_restart = false;
+@@ -1238,6 +1239,12 @@ bool g_restart = false;
  }
  
  static int run(int argc, char** argv) {
@@ -1472,10 +1472,10 @@ index 09e544b..1742a64 100644
 +  // or a log line exists (standalone-ra-account-v1, consumer obligations).
 +  ds::cheevos::ra_account::captureEnv();
 +#endif
+   take_quit_signals();
    const char* rom = nullptr;
    const char* config_arg = nullptr;
-   long frame_limit = 0;
-@@ -1146,6 +1153,10 @@ static int run(int argc, char** argv) {
+@@ -1335,6 +1342,10 @@ static int run(int argc, char** argv) {
      // Implies enabled, but a later --no-cheevos still wins (applied in order).
      else if (arg("--cheevos-token")) { cli.set("cheevos.token_file", argv[++i]); cli.set("cheevos.enabled", "true"); }
      else if (arg("--cheevos-user")) cli.set("cheevos.username", argv[++i]);
@@ -1486,16 +1486,16 @@ index 09e544b..1742a64 100644
  #endif
      else if (flag("--autoload")) cli.set("emu.autoload", "true");
      else if (flag("--no-autoload")) cli.set("emu.autoload", "false");
-@@ -1220,7 +1231,7 @@ static int run(int argc, char** argv) {
+@@ -1427,7 +1438,7 @@ static int run(int argc, char** argv) {
    }
    auto apply_cli = [&] { for (const char* k : {"paths.bios9", "paths.bios7", "paths.firmware", "paths.saves", "paths.states", "video.scale", "video.dual_window", "video.layout", "video.screen", "video.pip_alpha", "video.screen_gap", "video.dominant_ratio", "video.dominant_threshold", "video.integer_scale",
-                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.sink", "video.disp", "video.fbdev", "video.gpu_present", "video.vsync", "audio.enabled", "audio.volume",
--                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
-+                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username", "cheevos.managed_dir"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
+                                               "video.fullscreen", "video.linear", "video.lcd_grid", "video.colour", "video.chunky", "video.chunky_threshold", "video.chunky_cell", "video.seam", "video.sink", "video.disp", "video.fbdev", "video.gpu_present", "video.vsync", "audio.enabled", "audio.volume",
+-                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "video.gpu3d_scale", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
++                                              "audio.mic", "emu.jit", "emu.timing", "emu.speed", "emu.limiter", "emu.pacing", "audio.buffer_size", "audio.latency_frames", "emu.frameskip", "emu.frameskip_mode", "emu.frameskip_capture", "video.aa", "video.gpu3d", "video.gpu3d_scale", "cart.preload", "emu.autosave_png", "emu.autoload", "cart.cache_root_only", "cart.single_nds", "cheevos.enabled", "cheevos.token_file", "cheevos.username", "cheevos.managed_dir"}) if (cli.has(k)) cfg.set(k, cli.str(k)); };
    apply_cli();
    if (inspect_cart_arg) return inspect_cart(inspect_cart_arg, cfg.flag("cart.single_nds", false));
    const std::string bios9 = cfg.str("paths.bios9"), bios7 = cfg.str("paths.bios7");
-@@ -2713,7 +2724,18 @@ sdl_ready:
+@@ -3190,7 +3201,18 @@ sdl_ready:
    // RetroAchievements, Casual mode. Off unless asked for; every failure is
    // reported once and then ignored.
    ds::cheevos::Client cheevos;
@@ -1515,7 +1515,7 @@ index 09e544b..1742a64 100644
  #endif
  #if DSPERATE_NET
    std::unique_ptr<ds::net::LanMp> lan;
-@@ -2907,7 +2929,8 @@ sdl_ready:
+@@ -3408,7 +3430,8 @@ sdl_ready:
        // toast, which is drawn onto the canvas afterwards.
        if (m.kind == ds::cheevos::Message::Kind::Unlock && cfg.flag("cheevos.auto_screenshot", false))
          shot_pending = true;
@@ -1523,35 +1523,35 @@ index 09e544b..1742a64 100644
 +      // UMRK: a Leaf account problem is shown even with toasts off.
 +      if (!cfg.flag("cheevos.toasts", true) && !m.account) continue;
        Toast t;
-       t.header = m.kind == ds::cheevos::Message::Kind::Unlock ? "ACHIEVEMENT UNLOCKED"
+       t.header = m.kind == ds::cheevos::Message::Kind::Unlock ? tr("ACHIEVEMENT UNLOCKED")
                 : m.kind == ds::cheevos::Message::Kind::Problem ? "RETROACHIEVEMENTS" : nullptr;
-@@ -2930,20 +2953,38 @@ sdl_ready:
+@@ -3431,20 +3454,38 @@ sdl_ready:
      }
      std::string status() const override {
-       if (!c) return "NOT AVAILABLE IN THIS BUILD";
+       if (!c) return tr("NOT AVAILABLE IN THIS BUILD");
 +      std::string base;
        switch (c->state()) {
        case ds::cheevos::State::Off:
--        return c->unavailable_reason().empty() ? "TURNED OFF" : c->unavailable_reason();
--      case ds::cheevos::State::SignedOut:   return "NOT SIGNED IN";
--      case ds::cheevos::State::SigningIn:   return "SIGNING IN...";
--      case ds::cheevos::State::SignedIn:    return "SIGNED IN AS " + c->username();
--      case ds::cheevos::State::LoadingGame: return "LOADING ACHIEVEMENTS...";
--      case ds::cheevos::State::Playing:     return "SIGNED IN AS " + c->username();
-+        base = c->unavailable_reason().empty() ? "TURNED OFF" : c->unavailable_reason();
+-        return c->unavailable_reason().empty() ? std::string(tr("TURNED OFF")) : c->unavailable_reason();
+-      case ds::cheevos::State::SignedOut:   return tr("NOT SIGNED IN");
+-      case ds::cheevos::State::SigningIn:   return tr("SIGNING IN...");
+-      case ds::cheevos::State::SignedIn:    return trf("SIGNED IN AS {1}", {c->username()});
+-      case ds::cheevos::State::LoadingGame: return tr("LOADING ACHIEVEMENTS...");
+-      case ds::cheevos::State::Playing:     return trf("SIGNED IN AS {1}", {c->username()});
++        base = c->unavailable_reason().empty() ? std::string(tr("TURNED OFF")) : c->unavailable_reason();
 +        break;
-+      case ds::cheevos::State::SignedOut:   base = "NOT SIGNED IN"; break;
-+      case ds::cheevos::State::SigningIn:   base = "SIGNING IN..."; break;
-+      case ds::cheevos::State::SignedIn:    base = "SIGNED IN AS " + c->username(); break;
-+      case ds::cheevos::State::LoadingGame: base = "LOADING ACHIEVEMENTS..."; break;
-+      case ds::cheevos::State::Playing:     base = "SIGNED IN AS " + c->username(); break;
++      case ds::cheevos::State::SignedOut:   base = tr("NOT SIGNED IN"); break;
++      case ds::cheevos::State::SigningIn:   base = tr("SIGNING IN..."); break;
++      case ds::cheevos::State::SignedIn:    base = trf("SIGNED IN AS {1}", {c->username()}); break;
++      case ds::cheevos::State::LoadingGame: base = tr("LOADING ACHIEVEMENTS..."); break;
++      case ds::cheevos::State::Playing:     base = trf("SIGNED IN AS {1}", {c->username()}); break;
        case ds::cheevos::State::EmptySet:
--        return "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
-+        base = "NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET";
+-        return tr("NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET");
++        base = tr("NO ACHIEVEMENTS PUBLISHED FOR THIS GAME YET");
 +        break;
        case ds::cheevos::State::NoSet:
--        return "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
-+        base = "NO ACHIEVEMENTS FOR THIS ROM - HASH " + c->game_hash();
+-        return trf("NO ACHIEVEMENTS FOR THIS ROM - HASH {1}", {c->game_hash()});
++        base = trf("NO ACHIEVEMENTS FOR THIS ROM - HASH {1}", {c->game_hash()});
 +        break;
        }
 -      return "";
@@ -1573,7 +1573,7 @@ index 09e544b..1742a64 100644
      }
      std::string progress() const override {
        if (!c || sum.total == 0) return {};
-@@ -3075,6 +3116,27 @@ sdl_ready:
+@@ -3574,6 +3615,27 @@ sdl_ready:
        // A password is never kept; an expired token fails and the player
        // signs in again from the menu.
        ds::cheevos::Credentials creds;
@@ -1601,7 +1601,7 @@ index 09e544b..1742a64 100644
        // A token file named on the command line overrides whatever is
        // stored; nothing is written back, the file isn't ours.
        const std::string token_file = cfg.str("cheevos.token_file");
-@@ -3104,6 +3166,7 @@ sdl_ready:
+@@ -3603,6 +3665,7 @@ sdl_ready:
        }
        if (!creds.empty()) cheevos.sign_in_with_token(creds.username, creds.token);
        else std::fprintf(stderr, "cheevos: not signed in\n");
@@ -1610,10 +1610,10 @@ index 09e544b..1742a64 100644
        // Safe to hash the cart's source here: read_unpatched reads past the
        // secure-area rewrite Cart has already done by this point.
 diff --git a/src/frontend/sdl/menu.cpp b/src/frontend/sdl/menu.cpp
-index 3d872ff..95226ce 100644
+index d10a2f9..e602fbe 100644
 --- a/src/frontend/sdl/menu.cpp
 +++ b/src/frontend/sdl/menu.cpp
-@@ -845,7 +845,10 @@ int account_rows(const CheevosHost* h, AccountRow out[kAccountRows]) {
+@@ -1024,7 +1024,10 @@ int account_rows(const CheevosHost* h, AccountRow out[kAccountRows]) {
    int n = 0;
    if (!h) return 0;
    if (h->signed_in()) out[n++] = AccountRow::SignOut;
@@ -1626,10 +1626,10 @@ index 3d872ff..95226ce 100644
    out[n++] = AccountRow::Toasts;
    out[n++] = AccountRow::Screenshot;
 diff --git a/src/frontend/sdl/menu.h b/src/frontend/sdl/menu.h
-index 756f8f4..c185e02 100644
+index 3ab9c8a..d9c7546 100644
 --- a/src/frontend/sdl/menu.h
 +++ b/src/frontend/sdl/menu.h
-@@ -77,6 +77,11 @@ struct CheevosHost {
+@@ -79,6 +79,11 @@ struct CheevosHost {
    virtual bool signed_in() const = 0;
    virtual bool has_set() const = 0;
  

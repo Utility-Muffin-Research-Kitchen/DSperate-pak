@@ -23,48 +23,71 @@ clean clone with no sibling checkout.
 
 ## Status
 
-[DSperate 3.0.5](https://github.com/Utility-Muffin-Research-Kitchen/DSperate-pak/releases/tag/v3.0.5)
-is available for MLP1 through Pak Rat on Leaf 0.12.0 or newer. It updates the
-source pin to **DSperate v3.0.5** with five reviewed pak patches and adds the
-**DSperate TATE** core; only TATE on a TV wants Leaf 0.14 (see [TATE](#tate)).
-On Leaf 0.12.0-beta.6 or newer, DSperate signs in with the account saved in
-**Settings > Games > Accounts**, and an older Leaf leaves DSperate's own
-sign-in as it was.
+DSperate 3.5.0 updates the source pin to **DSperate v3.5.0** with the same five
+reviewed pak patches. It installs through Pak Rat on Leaf 0.12.0 or newer, over
+3.0.5 or any earlier version, and keeps your saves, states and settings.
 
-Two clean builds and a rebuild from the corresponding-source archive reproduce
-the profile-guided binary `11124142...`, trained on all eight of upstream's
-v3.0.5 scenes and a Mario Kart DS boot the pak adds, and the pak ZIP is
-byte-for-byte reproducible. The wrapper tests cover TATE on the panel and on a
-TV. `--version` reports `v3.0.5 (ddf2910)`.
+Two clean builds reproduce the profile-guided binary `e587bbc1...`, trained on
+all nine of upstream's v3.5.0 scenes and the Mario Kart DS boot the pak adds.
+`--version` reports `v3.5.0 (3a2bcd2)`.
 
-Checked on an MLP1 on 2026-10-27. This exact binary held New Super Mario Bros.,
-Golden Sun: Dark Dawn and Spirit Tracks at full speed, and Mario Kart DS at
-99.9%, over the same frame windows as the table below. It reinstalled through
-Pak Rat with every save, state and setting unchanged, a Mario Kart DS session
-played by hand signed in to RetroAchievements and saved a state, and TATE's
-picture and controls turned as described in [TATE](#tate) on a TV and, after
-the TV was unplugged, on the MLP1's screen. The same source with the previous
-profile updated over 3.0.3 through Pak Rat with every save, state and setting
-unchanged, and TATE's stylus and pause menu turned too. Not re-run for 3.0.5:
-loading a save state, fast forward, the layout hotkey, and suspend and resume.
+Checked on an MLP1 on 2026-11-20, on Leaf 0.14.1-beta.1. It installed through
+Pak Rat over 3.0.5 with all 37 DSperate saves, states and settings unchanged,
+and reports `v3.5.0 (3a2bcd2)`. Mario Kart DS loaded a save state made with
+3.0.5 and signed in to RetroAchievements with the account saved in Leaf, and so
+did DSperate TATE, with the picture turned. With the faster picture path forced
+to fail, DSperate still started and ran on its slower fallback. Not re-run for 3.5.0: the controls by hand, fast forward, the
+layout hotkey, suspend and resume, TATE on a TV, the Guitar Grip and a GBA game
+in slot 2.
 
-What 3.0.5 changes for you:
+Measured on the same MLP1 through real Leaf launches, at the normal 60 fps cap,
+over frames 900 to 2400 of each game's boot with no input (frames 1200 to 3000
+for New Super Mario Bros.), alternating with the published 3.0.5. Two passes
+each, and five for Mario Kart DS:
 
-- **DSperate TATE**, a second Nintendo DS core for playing with the MLP1 or
-  your TV turned on its side. See [TATE](#tate).
-- A game that can't start now says why on the screen, instead of returning to
-  Leaf with no message. Press any button to go back.
-- The picture is scaled on the GPU with a Vulkan render pass, now tried first,
-  instead of 3.0.3's compute pass. The speed table below is still 3.0.3's.
-- Mario Kart DS runs more smoothly. The build is now also tuned on Mario Kart
-  DS itself, which otherwise dropped frames in bursts.
-- Upstream fixed a stall in its JIT, a 2D drawing timing issue and, with
-  `gpu3d = true`, hairline gaps between 3D polygons.
-- Save states from 3.0.3 keep loading: the state format is the same.
-- After a suspend the DS clock still runs behind by the time the MLP1 slept,
-  as in 3.0.3. Upstream now catches the clock up when the DS lid opens, but the
-  MLP1 has no lid, and the pak keeps DSperate from faking a lid close on resume
-  because that leaves some games, such as Contra 4, on a black screen.
+| Game | 3.0.5 frames over 16.7 ms | 3.5.0 frames over 16.7 ms |
+| --- | --- | --- |
+| New Super Mario Bros. | 0 of 3,600 | 0 of 3,600 |
+| Golden Sun: Dark Dawn | 27 of 3,000 (0.9%) | 5 of 3,000 (0.2%) |
+| The Legend of Zelda: Spirit Tracks | 121 of 3,000 (4.0%) | 0 of 3,000 |
+| Mario Kart DS | 290 of 7,500 (3.9%), 249 of them in one pass | 23 of 7,500 (0.3%) |
+
+Every game ran at full speed on 3.5.0, and audio underruns fell from 144 to 56
+over all the runs.
+
+What 3.5.0 changes for you:
+
+- **Dragon Quest IX's menus and loading no longer stutter.** Opening and closing
+  its equipment menu used to drop frames and crackle.
+- **Bilinear, seam blend and chunky now work.** The MLP1 scales the picture on
+  the GPU, which ignored `linear`, `seam` and `chunky` before. They now look as
+  they do on the CPU scaler.
+- **Colour correction**, off by default: the **COLOUR** menu row gives an
+  original DS's or a DS Lite's screen colours.
+- **The pause menu can be in Simplified Chinese.** Choose it in **MENU
+  LANGUAGE** at the top of the Emulation page.
+- **Guitar Hero: On Tour, Decades, Modern Hits and Band Hero** get the Guitar
+  Grip in slot 2 by themselves. The frets are L1, L2, R2 and R1, so in those
+  games L2 and R2 are frets rather than stylus taps, and down or up on the
+  d-pad strums while you hold a fret.
+- **Circle Pad patches work.** Games with one of shocoman's analog-control
+  cheats read the stick once you turn the cheat on; the cheats are built in.
+  While a patch has the stick, hold Select to move the stylus with it.
+- **GBA games in slot 2.** A DS game with dual-slot extras, such as Pokémon's,
+  can read a GBA game. Set `gba_games` under `[paths]` in your `dsperate.ini` to
+  the folder that holds them; DSperate then asks which one to insert.
+- **GPU 3D** is still off by default. If you turn it on for a game, it can now
+  draw the 3D at two or four times the DS's resolution (**GPU 3D SCALE**), and
+  the first launch with a new setting says it is compiling shaders.
+- **A Rumble Pak sits in slot 2**, because the MLP1's pad can rumble. Games
+  that support the DS Rumble Pak can use it; vibration on the MLP1 has not been
+  checked yet.
+- A `firmware.bin` that isn't a real dump is refused with a message, and
+  DSperate uses its generated firmware instead. Before, it booted and every
+  touch landed in a corner.
+- Save states from 3.0.3 and 3.0.5 keep loading: the state format is the same.
+
+Earlier releases:
 
 DSperate 3.0.3 (binary `62a5f6c7...`, `--version` `v3.0.3 (f5fa35e)`) passed
 MLP1 device qualification on 2026-10-10. It updated
@@ -165,7 +188,7 @@ every step, a full card, damaged files and a missing account directory.
 
 `make standalone` builds inside the digest-pinned `mlp1-toolchain` image and
 refuses an artifact whose sha256 does not match `standalone/upstream.lock.json`.
-This candidate builds with a profile trained for v3.0.5 with the pak's own
+This candidate builds with a profile trained for v3.5.0 with the pak's own
 GCC 12.3.0 toolchain, on upstream's scenes plus a Mario Kart DS boot.
 `make pgo-train` retrains it in the same pinned image from the scene ROMs and
 the real DS BIOS and firmware, which you supply and which never enter the
@@ -369,9 +392,10 @@ the Nintendo DS core picker like DSperate, per system or per game.
 - Hotkeys use the buttons named in [Controls](#controls), not turned ones. Hold
   Select and press the d-pad button that points right in your hand to change
   the layout.
-- Leaf passes its RetroAchievements account only to DSperate for now. Once
-  DSperate has used a Leaf account, TATE plays without achievements, and it
-  leaves the account and DSperate's sign-in as they are.
+- On Leaf 0.14 or newer, TATE signs in to RetroAchievements with the account
+  saved in Leaf, like DSperate. On Leaf 0.12 and 0.13, once DSperate has used a
+  Leaf account, TATE plays without achievements and leaves the account and
+  DSperate's sign-in as they are.
 
 ## Display
 
